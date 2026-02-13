@@ -1,0 +1,38 @@
+[project]
+name = "letterboxd-recommender"
+version = "0.1.0"
+description = "Letterboxd Habit Recommender backend"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Kana" }]
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.27",
+  "pydantic>=2.6",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "httpx>=0.26",
+  "ruff>=0.3",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["letterboxd_recommender"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
