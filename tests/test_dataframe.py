@@ -26,6 +26,7 @@ def test_build_user_films_df_union_and_features() -> None:
         "watchlist_position",
         "watched_position_norm",
         "watchlist_position_norm",
+        "is_candidate",
         "interaction",
     }
 
@@ -34,9 +35,13 @@ def test_build_user_films_df_union_and_features() -> None:
     b = df.set_index("film_slug").loc["b"]
     assert bool(b["in_watched"]) is True
     assert bool(b["in_watchlist"]) is True
+    assert bool(b["is_candidate"]) is False
 
     assert df["watched_position_norm"].dtype == float
     assert df["watchlist_position_norm"].dtype == float
+
+    c = df.set_index("film_slug").loc["c"]
+    assert bool(c["is_candidate"]) is True
 
 
 def test_load_ingested_lists_roundtrip(tmp_path: Path) -> None:

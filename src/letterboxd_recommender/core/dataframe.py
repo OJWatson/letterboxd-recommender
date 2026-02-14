@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 import pandas as pd
 
@@ -10,6 +11,16 @@ from letterboxd_recommender.core.letterboxd_ingest import IngestedLists, _defaul
 
 class DataframeBuildError(RuntimeError):
     pass
+
+
+EXPECTED_USER_FILMS_COLUMNS: Final[set[str]] = {
+    "username",
+    "film_slug",
+    "in_watched",
+    "in_watchlist",
+    "watched_position",
+    "watchlist_position",
+}
 
 
 @dataclass(frozen=True)
@@ -56,6 +67,10 @@ def build_user_films_df(lists: IngestedLists) -> pd.DataFrame:
     This dataframe is the stable interface between ingestion and recommendation.
 
     Rows are film slugs with membership in watched and watchlist.
+
+    Notes:
+        - `film_slug` is the Letterboxd slug (e.g., "parasite").
+        - Positions reflect feed ordering (0-indexed; 0 is most-recent).
     """
 
     if not lists.username:
@@ -83,27 +98,60 @@ def build_user_films_df(lists: IngestedLists) -> pd.DataFrame:
         )
 
     df = pd.DataFrame.from_records(rows)
+    validate_user_films_df(df)
     return add_basic_features(df)
 
 
-def add_basic_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Feature engineering scaffold.
+def validate_user_films_df(df: pd.DataFrame) -> None:
+    missing = EXPECTED_USER_FILMS_COLUMNS - set(df.columns)
+    if missing:
+        raise DataframeBuildError(f"Missing columns: {sorted(missing)}")
 
-    Adds simple normalized positional features and a coarse interaction label.
+
+@dataclass(frozen=True)
+class FeatureEngineeringConfig:
+    """Configuration for simple feature engineering.
+
+    This is intentionally lightweight; later milestones can add richer metadata
+    (genres, cast, directors, etc.) and more advanced encoders.
     """
 
+    # Fill value for missing positions when normalizing; if None, uses (max_pos + 1).
+    missing_position_fill: float | None = None
+
+
+def add_basic_features(
+    df: pd.DataFrame, *, config: FeatureEngineeringConfig | None = None
+) -> pd.DataFrame:
+    """Feature engineering scaffold.
+
+    Adds a few deterministic features that will remain stable over time:
+
+    - Normalized positional features for watched/watchlist ordering
+    - A coarse interaction label
+    - A simple candidate flag for recommendation filtering
+    """
+
+    cfg = config or FeatureEngineeringConfig()
+
     out = df.copy()
+    validate_user_films_df(out)
 
-    # Positions are 0-indexed; normalize to [0, 1] where possible.
+    # Positions are 0-indexed; normalize to ~[0, 1]. Missing positions are filled
+    # slightly beyond the max position.
     for col in ["watched_position", "watchlist_position"]:
-        if col not in out.columns:
-            raise DataframeBuildError(f"Missing column: {col}")
-
         max_pos = out[col].max(skipna=True)
         if pd.isna(max_pos) or max_pos == 0:
             out[f"{col}_norm"] = 0.0
-        else:
-            out[f"{col}_norm"] = out[col].fillna(max_pos + 1) / float(max_pos)
+            continue
+
+        fill = cfg.missing_position_fill
+        if fill is None:
+            fill = float(max_pos) + 1.0
+
+        out[f"{col}_norm"] = out[col].fillna(fill) / float(max_pos)
+
+    out["is_candidate"] = out["in_watchlist"] & (~out["in_watched"])
 
     def _label(row: pd.Series) -> str:
         if bool(row.get("in_watched")):
@@ -114,3 +162,12 @@ def add_basic_features(df: pd.DataFrame) -> pd.DataFrame:
 
     out["interaction"] = out.apply(_label, axis=1)
     return out
+
+
+def build_user_films_df_for_username(
+    username: str, *, data_dir: Path | None = None
+) -> pd.DataFrame:
+    """Convenience helper: load persisted lists and build the internal dataframe."""
+
+    lists = load_ingested_lists(username, data_dir=data_dir)
+    return build_user_films_df(lists)
