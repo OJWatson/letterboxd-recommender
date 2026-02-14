@@ -65,5 +65,24 @@ def infographic_summary(
 
 @router.post("/api/recommend", response_model=RecommendResponse)
 def recommend(req: RecommendRequest) -> RecommendResponse:
-    # M2+ will implement recommendation logic.
-    raise HTTPException(status_code=501, detail="Recommendation engine not implemented yet")
+    from letterboxd_recommender.core.recommender import recommend_for_user
+
+    try:
+        recs = recommend_for_user(req.username, k=req.k, prompt=req.prompt)
+        return RecommendResponse(
+            username=req.username,
+            recommendations=[
+                {
+                    "film_id": r.film_id,
+                    "title": r.title,
+                    "year": r.year,
+                    "blurb": r.blurb,
+                    "why": r.why,
+                }
+                for r in recs
+            ],
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
