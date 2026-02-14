@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
+from letterboxd_recommender.core.film_metadata import FilmMetadataError
+from letterboxd_recommender.core.infographic import build_infographic_summary
 from letterboxd_recommender.core.letterboxd_ingest import (
     LetterboxdIngestError,
     LetterboxdUserNotFound,
@@ -9,6 +11,7 @@ from letterboxd_recommender.core.letterboxd_ingest import (
     persist_ingest,
 )
 from letterboxd_recommender.core.schemas import (
+    InfographicSummaryResponse,
     IngestResponse,
     RecommendRequest,
     RecommendResponse,
@@ -35,6 +38,28 @@ def ingest(username: str) -> IngestResponse:
     except LetterboxdUserNotFound as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except LetterboxdIngestError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@router.get("/api/users/{username}/infographic", response_model=InfographicSummaryResponse)
+def infographic_summary(
+    username: str,
+    list_kind: str = Query(default="watched", pattern="^(watched|watchlist|all)$"),
+    top_n: int = Query(default=10, ge=1, le=50),
+) -> InfographicSummaryResponse:
+    try:
+        summary = build_infographic_summary(username, list_kind=list_kind, top_n=top_n)
+        return InfographicSummaryResponse(
+            username=username,
+            list_kind=summary.list_kind,
+            film_count=summary.film_count,
+            top_genres=[{"name": k, "count": v} for k, v in summary.top_genres],
+            top_decades=[{"name": k, "count": v} for k, v in summary.top_decades],
+            top_directors=[{"name": k, "count": v} for k, v in summary.top_directors],
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except FilmMetadataError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 

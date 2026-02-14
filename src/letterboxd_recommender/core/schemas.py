@@ -26,3 +26,17 @@ class Recommendation(BaseModel):
 class RecommendResponse(BaseModel):
     username: str
     recommendations: list[Recommendation]
+
+
+class CountItem(BaseModel):
+    name: str
+    count: int = Field(ge=0)
+
+
+class InfographicSummaryResponse(BaseModel):
+    username: str
+    list_kind: str
+    film_count: int = Field(ge=0)
+    top_genres: list[CountItem]
+    top_decades: list[CountItem]
+    top_directors: list[CountItem]
