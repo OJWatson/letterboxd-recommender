@@ -22,6 +22,7 @@ class FilmMetadata:
     year: int | None = None
     directors: list[str] | None = None
     genres: list[str] | None = None
+    countries: list[str] | None = None
 
 
 _LD_JSON_RE = re.compile(
@@ -47,6 +48,7 @@ def load_cached_film_metadata(slug: str, *, data_dir: Path | None = None) -> Fil
         year=raw.get("year"),
         directors=raw.get("directors"),
         genres=raw.get("genres"),
+        countries=raw.get("countries"),
     )
 
 
@@ -146,6 +148,13 @@ def parse_film_metadata_from_html(slug: str, html: str) -> FilmMetadata:
         if isinstance(g, str):
             genres.append(g.strip())
 
+    countries: list[str] = []
+    for c in _coerce_list(movie.get("countryOfOrigin")):
+        if isinstance(c, dict) and isinstance(c.get("name"), str):
+            countries.append(c["name"].strip())
+        elif isinstance(c, str):
+            countries.append(c.strip())
+
     # Normalise + de-dupe while preserving order.
     def _dedupe(items: list[str]) -> list[str]:
         seen: set[str] = set()
@@ -163,6 +172,7 @@ def parse_film_metadata_from_html(slug: str, html: str) -> FilmMetadata:
         year=year,
         directors=_dedupe(directors) or None,
         genres=_dedupe(genres) or None,
+        countries=_dedupe(countries) or None,
     )
 
 

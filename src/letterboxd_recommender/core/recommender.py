@@ -6,6 +6,7 @@ from pathlib import Path
 
 from letterboxd_recommender.core.dataframe import load_ingested_lists
 from letterboxd_recommender.core.film_metadata import FilmMetadata, get_film_metadata
+from letterboxd_recommender.core.nlp import RefinementConstraints, parse_refinement_prompt
 
 
 class RecommendationError(RuntimeError):
@@ -265,6 +266,108 @@ def top_feature_contributions(
     return score, contributions[:top_n]
 
 
+def _normalise_text_token(value: str) -> str:
+    value = value.strip().lower()
+    value = " ".join(value.split())
+    return value
+
+
+def _slugify_title(title: str) -> str:
+    txt = _normalise_text_token(title)
+    out: list[str] = []
+    for ch in txt:
+        if ch.isalnum():
+            out.append(ch)
+        elif ch in {" ", "-"}:
+            out.append("-")
+    slug = "".join(out)
+    slug = "-".join([p for p in slug.split("-") if p])
+    return slug
+
+
+def _resolve_similar_to_slug(
+    title_or_slug: str,
+    *,
+    candidates: list[str],
+    provider: Callable[[str], FilmMetadata],
+) -> str | None:
+    # Try direct slug match first.
+    token = _normalise_text_token(title_or_slug)
+    if token in {c.lower() for c in candidates}:
+        for c in candidates:
+            if c.lower() == token:
+                return c
+
+    wanted = _normalise_text_token(title_or_slug)
+
+    # Try to find by title within our known candidate set.
+    for slug in candidates:
+        meta = provider(slug)
+        if meta.title and _normalise_text_token(meta.title) == wanted:
+            return slug
+
+    # Last attempt: slugify the title.
+    slugified = _slugify_title(title_or_slug)
+    if slugified in candidates:
+        return slugified
+
+    return None
+
+
+def _matches_constraints(
+    meta: FilmMetadata,
+    constraints: RefinementConstraints,
+    *,
+    similar_to: FilmMetadata | None = None,
+) -> bool:
+    # Genre filter: require at least one of the requested genres.
+    if constraints.include_genres:
+        cand = {_normalise_text_token(g) for g in (meta.genres or []) if g}
+        wanted = {_normalise_text_token(g) for g in constraints.include_genres if g}
+        if not (cand & wanted):
+            return False
+
+    # Year bounds: inclusive.
+    if constraints.year_min is not None or constraints.year_max is not None:
+        if meta.year is None:
+            return False
+        if constraints.year_min is not None and meta.year < constraints.year_min:
+            return False
+        if constraints.year_max is not None and meta.year > constraints.year_max:
+            return False
+
+    # Country filter: require at least one match.
+    if constraints.include_countries:
+        cand = {_normalise_text_token(c) for c in (meta.countries or []) if c}
+        wanted = {_normalise_text_token(c) for c in constraints.include_countries if c}
+        if not (cand & wanted):
+            return False
+
+    # Similar-to: require some overlap with the reference film.
+    if similar_to is not None:
+        ref_genres = {_normalise_text_token(g) for g in (similar_to.genres or []) if g}
+        ref_directors = {_normalise_text_token(d) for d in (similar_to.directors or []) if d}
+        ref_decades: set[str] = set()
+        if similar_to.year is not None:
+            ref_decades.add(_decade_label(similar_to.year))
+
+        cand_genres = {_normalise_text_token(g) for g in (meta.genres or []) if g}
+        cand_directors = {_normalise_text_token(d) for d in (meta.directors or []) if d}
+        cand_decades: set[str] = set()
+        if meta.year is not None:
+            cand_decades.add(_decade_label(meta.year))
+
+        has_overlap = bool(
+            (ref_genres & cand_genres)
+            or (ref_directors & cand_directors)
+            or (ref_decades & cand_decades)
+        )
+        if not has_overlap:
+            return False
+
+    return True
+
+
 def recommend_for_user(
     username: str,
     *,
@@ -294,12 +397,28 @@ def recommend_for_user(
     if k < 1:
         raise RecommendationError("k must be >= 1")
 
-    _ = prompt  # reserved
+    parsed = parse_refinement_prompt(prompt)
+    constraints = parsed.constraints
+    if constraints.k is not None:
+        k = constraints.k
 
     lists = load_ingested_lists(username, data_dir=data_dir)
     exclude = set(lists.watched) | set(lists.watchlist)
 
     provider = metadata_provider or (lambda slug: get_film_metadata(slug, data_dir=data_dir))
+
+    similar_meta: FilmMetadata | None = None
+    if constraints.similar_to_title:
+        search_space = list(dict.fromkeys([*lists.watched, *lists.watchlist, *POPULAR_FILM_SLUGS]))
+        resolved = _resolve_similar_to_slug(
+            constraints.similar_to_title,
+            candidates=search_space,
+            provider=provider,
+        )
+        if resolved:
+            similar_meta = provider(resolved)
+            exclude.add(resolved)
+
     profile = _build_user_profile(lists.watched, provider=provider)
 
     profile_is_empty = not (profile.genres or profile.decades or profile.directors)
@@ -313,6 +432,9 @@ def recommend_for_user(
             continue
 
         meta = provider(slug)
+        if not _matches_constraints(meta, constraints, similar_to=similar_meta):
+            continue
+
         title = meta.title or slug.replace("-", " ").title()
         score, why, breakdown, overlaps = _similarity_score(profile, meta)
         has_overlap = _has_any_overlap(overlaps)
