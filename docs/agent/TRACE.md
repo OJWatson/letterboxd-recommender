@@ -14,3 +14,6 @@ This file records task-by-task execution notes for the portfolio automation.
 - CI.FIX.M2: Confirmed milestone M2 CI acceptance gates are green.
   - `uv run ruff check .`
   - `uv run pytest -q`
+- M3.2: Added a deterministic, LLM-light refinement prompt parser.
+  - Core: `core/nlp.py::parse_refinement_prompt` returns a small schema (k, genres, year bounds, countries, similar-to title).
+  - Tests: `tests/test_nlp_parser.py` covers the spec examples.

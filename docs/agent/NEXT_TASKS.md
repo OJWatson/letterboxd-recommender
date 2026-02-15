@@ -1,10 +1,10 @@
 # NEXT_TASKS
 
 Now:
-- M3.2 — NLP: implement intent/constraint parser for refinement prompts (LLM-light + deterministic schema)
+- M3.3 — Recommender: apply constraint filtering layer (genre/year/country/similar-to) + tests
 
 Next:
-- (none)
+- M3.4 — Session: track previously recommended films per session and enforce exclusion
 
 Done:
 - M0.END — Milestone end: M0 complete (gate on CI)
