@@ -27,7 +27,7 @@ jobs:
           version: "latest"
 
       - name: Install dependencies
-        run: uv sync --dev --frozen --python "${{ steps.py.outputs.python-path }}"
+        run: uv sync --group dev --frozen --python "${{ steps.py.outputs.python-path }}"
 
       - name: Ruff
         run: uv run ruff check .
