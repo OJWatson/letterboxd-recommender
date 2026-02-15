@@ -7,6 +7,7 @@ Next:
 - (none)
 
 Done:
+- M0.END — Milestone end: M0 complete (gate on CI)
 - M3.0 — Expose simple HTML report page for infographic + recommendations
 - M2.5 — Persist user ingest + derived features with versioned cache key
 - M0.2 — Implement Letterboxd data ingestion (watched + watchlist)
