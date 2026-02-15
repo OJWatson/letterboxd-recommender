@@ -10,26 +10,23 @@ from letterboxd_recommender.core.letterboxd_ingest import IngestedLists, persist
 
 
 def _fake_meta(slug: str) -> FilmMetadata:
-    # keep simple + deterministic
     return FilmMetadata(slug=slug, title=slug.replace("-", " ").title(), year=None)
 
 
-def test_recommend_endpoint_returns_5_and_excludes_watched_and_watchlist(
+def test_session_tracks_previously_recommended_and_excludes_on_next_call(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.setenv("LETTERBOXD_RECOMMENDER_DATA_DIR", str(tmp_path / "data"))
 
     persist_ingest(
-        IngestedLists(username="alice", watched=["alien", "heat"], watchlist=["dune"]),
+        IngestedLists(username="alice", watched=["alien"], watchlist=[]),
         data_dir=tmp_path / "data",
     )
 
-    # Make candidate pool small + controlled for test.
     monkeypatch.setattr(
         "letterboxd_recommender.core.recommender.POPULAR_FILM_SLUGS",
         [
             "alien",
-            "dune",
             "the-matrix",
             "parasite",
             "inception",
@@ -45,19 +42,28 @@ def test_recommend_endpoint_returns_5_and_excludes_watched_and_watchlist(
         lambda slug, **_: _fake_meta(slug),
     )
 
-    app = create_app()
-    client = TestClient(app)
+    client = TestClient(create_app())
 
-    resp = client.post("/api/recommend", json={"username": "alice", "k": 5})
-    assert resp.status_code == 200
+    r1 = client.post("/api/recommend", json={"username": "alice", "k": 3})
+    assert r1.status_code == 200
+    body1 = r1.json()
+    session_id = body1["session_id"]
 
-    body = resp.json()
-    assert body["username"] == "alice"
-    assert body["session_id"]
+    recs1 = {r["film_id"] for r in body1["recommendations"]}
+    assert len(recs1) == 3
+    assert "alien" not in recs1
 
-    recs = body["recommendations"]
-    assert len(recs) == 5
+    r2 = client.post(
+        "/api/recommend",
+        json={"username": "alice", "k": 3, "session_id": session_id},
+    )
+    assert r2.status_code == 200
 
-    # must exclude watched + watchlist
-    excluded = {"alien", "heat", "dune"}
-    assert not (excluded & {r["film_id"] for r in recs})
+    body2 = r2.json()
+    assert body2["session_id"] == session_id
+
+    recs2 = {r["film_id"] for r in body2["recommendations"]}
+    assert len(recs2) == 3
+
+    # Session exclusion: second response should not repeat the first.
+    assert not (recs1 & recs2)

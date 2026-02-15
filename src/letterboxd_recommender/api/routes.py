@@ -76,12 +76,25 @@ def infographic_summary(
 
 @router.post("/api/recommend", response_model=RecommendResponse)
 def recommend(req: RecommendRequest) -> RecommendResponse:
+    from letterboxd_recommender.api.session import SESSION_STORE
     from letterboxd_recommender.core.recommender import recommend_for_user
 
     try:
-        recs = recommend_for_user(req.username, k=req.k, prompt=req.prompt)
+        session_id, state = SESSION_STORE.get_or_create(req.session_id)
+
+        recs = recommend_for_user(
+            req.username,
+            k=req.k,
+            prompt=req.prompt,
+            exclude_slugs=set(state.recommended_slugs),
+        )
+
+        # Update per-session exclusion set.
+        state.recommended_slugs |= {r.film_id for r in recs}
+
         return RecommendResponse(
             username=req.username,
+            session_id=session_id,
             recommendations=[
                 {
                     "film_id": r.film_id,

@@ -11,6 +11,8 @@ class IngestResponse(BaseModel):
 
 class RecommendRequest(BaseModel):
     username: str
+    # Optional client-provided session id. If omitted, the API will create one.
+    session_id: str | None = None
     prompt: str | None = None
     k: int = Field(default=5, ge=1, le=20)
 
@@ -36,6 +38,7 @@ class Recommendation(BaseModel):
 
 class RecommendResponse(BaseModel):
     username: str
+    session_id: str
     recommendations: list[Recommendation]
 
 

@@ -84,6 +84,7 @@ def test_smoke_ingest_then_recommend(tmp_path: Path, monkeypatch) -> None:
 
     body2 = resp2.json()
     assert body2["username"] == username
+    assert body2["session_id"]
 
     rec_slugs = [r["film_id"] for r in body2["recommendations"]]
     assert "alien" not in rec_slugs

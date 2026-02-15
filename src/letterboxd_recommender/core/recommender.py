@@ -373,6 +373,7 @@ def recommend_for_user(
     *,
     k: int = 5,
     prompt: str | None = None,
+    exclude_slugs: set[str] | None = None,
     data_dir: Path | None = None,
     metadata_provider: Callable[[str], FilmMetadata] | None = None,
 ) -> list[RecommendationItem]:
@@ -388,6 +389,8 @@ def recommend_for_user(
 
     Args:
         prompt: currently ignored (reserved for later milestones)
+        exclude_slugs: optional additional slugs to exclude (e.g. already recommended
+            within the current session).
         metadata_provider: override for tests; signature (slug: str) -> FilmMetadata
     """
 
@@ -404,6 +407,8 @@ def recommend_for_user(
 
     lists = load_ingested_lists(username, data_dir=data_dir)
     exclude = set(lists.watched) | set(lists.watchlist)
+    if exclude_slugs:
+        exclude |= set(exclude_slugs)
 
     provider = metadata_provider or (lambda slug: get_film_metadata(slug, data_dir=data_dir))
 
