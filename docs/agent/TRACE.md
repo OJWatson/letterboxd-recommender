@@ -11,3 +11,6 @@ This file records task-by-task execution notes for the portfolio automation.
   - API: `POST /api/evaluate` (username, film_id, top_n)
   - Core: `core/recommender.py::top_feature_contributions` (genres/directors/decades contributions)
   - Tests cover endpoint output + 404 when user not ingested.
+- CI.FIX.M2: Confirmed milestone M2 CI acceptance gates are green.
+  - `uv run ruff check .`
+  - `uv run pytest -q`
