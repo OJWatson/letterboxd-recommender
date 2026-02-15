@@ -1,46 +1,96 @@
+version: 1
+project_id: letterboxd-recommender
+
 defaults:
   acceptance:
-  - uv run ruff check .
-  - uv run pytest -q
-project_id: letterboxd-recommender
+    - uv run ruff check .
+    - uv run pytest -q
+
 tasks:
-- depends_on: []
-  id: M0.2
-  title: Implement Letterboxd data ingestion (watched + watchlist)
-- depends_on:
-  - M0.2
-  id: M1.1
-  title: Construct internal dataframe + feature engineering scaffold
-- depends_on:
-  - M1.1
-  id: M1.2
-  title: Generate infographic summary and expose endpoint
-- depends_on:
-  - M1.2
-  id: M2.1
-  title: 'Base recommender: return 5 recommendations excluding watched/watchlist'
-- depends_on:
-  - M2.1
-  id: M2.2
-  title: 'Improve recommender: add simple similarity scoring and ranking tests'
-- depends_on:
-  - M2.2
-  id: M2.3
-  title: 'Recommender v2: add basic candidate filtering + scoring explainability'
-- depends_on:
-  - M2.3
-  id: M2.4
-  title: 'Add evaluation endpoint: return top features contributing to score'
-- depends_on:
-  - M2.4
-  id: M2.5
-  title: Persist user ingest + derived features with versioned cache key
-- depends_on:
-  - M2.5
-  id: M3.0
-  title: Expose simple HTML report page for infographic + recommendations
-- depends_on:
-  - M3.0
-  id: M3.1
-  title: Add smoke E2E test for ingest -> recommend flow
-version: 1
+  # M0 — foundation
+  - id: M0.2
+    title: Implement Letterboxd data ingestion (watched + watchlist)
+    depends_on: []
+  - id: M0.END
+    title: "Milestone end: M0 complete (gate on CI)"
+    depends_on: [M0.2]
+  - id: CI.FIX.M0
+    title: "CI fix: make GitHub Actions green for M0 boundary"
+    depends_on: [M0.END]
+
+  # M1 — dataset + infographic
+  - id: M1.1
+    title: Construct internal dataframe + feature engineering scaffold
+    depends_on: [M0.END]
+  - id: M1.2
+    title: Generate infographic summary and expose endpoint
+    depends_on: [M1.1]
+  - id: M1.END
+    title: "Milestone end: M1 complete (gate on CI)"
+    depends_on: [M1.2]
+  - id: CI.FIX.M1
+    title: "CI fix: make GitHub Actions green for M1 boundary"
+    depends_on: [M1.END]
+
+  # M2 — base recommendation engine
+  - id: M2.1
+    title: "Base recommender: return 5 recommendations excluding watched/watchlist"
+    depends_on: [M1.END]
+  - id: M2.2
+    title: "Improve recommender: add simple similarity scoring and ranking tests"
+    depends_on: [M2.1]
+  - id: M2.3
+    title: "Recommender v2: add basic candidate filtering + scoring explainability"
+    depends_on: [M2.2]
+  - id: M2.4
+    title: "Add evaluation endpoint: return top features contributing to score"
+    depends_on: [M2.3]
+  - id: M2.5
+    title: Persist user ingest + derived features with versioned cache key
+    depends_on: [M2.4]
+  - id: M2.END
+    title: "Milestone end: M2 complete (gate on CI)"
+    depends_on: [M2.5]
+  - id: CI.FIX.M2
+    title: "CI fix: make GitHub Actions green for M2 boundary"
+    depends_on: [M2.END]
+
+  # M3 — natural language refinement
+  - id: M3.0
+    title: Expose simple HTML report page for infographic + recommendations
+    depends_on: [M2.END]
+  - id: M3.1
+    title: Add smoke E2E test for ingest -> recommend flow
+    depends_on: [M3.0]
+  - id: M3.2
+    title: "NLP: implement intent/constraint parser for refinement prompts (LLM-light + deterministic schema)"
+    depends_on: [M3.1]
+  - id: M3.3
+    title: "Recommender: apply constraint filtering layer (genre/year/country/similar-to) + tests"
+    depends_on: [M3.2]
+  - id: M3.4
+    title: "Session: track previously recommended films per session and enforce exclusion"
+    depends_on: [M3.3]
+  - id: M3.END
+    title: "Milestone end: M3 complete (gate on CI)"
+    depends_on: [M3.4]
+  - id: CI.FIX.M3
+    title: "CI fix: make GitHub Actions green for M3 boundary"
+    depends_on: [M3.END]
+
+  # M4 — UI polish + deployment
+  - id: M4.0
+    title: "Frontend: add minimal UI (username input + chat-style refinement + infographic panel)"
+    depends_on: [M3.END]
+  - id: M4.1
+    title: "Backend: session persistence (lightweight store) + rate limiting / error handling"
+    depends_on: [M4.0]
+  - id: M4.2
+    title: "Deploy: add deployment docs + production config (CORS, env vars)"
+    depends_on: [M4.1]
+  - id: M4.END
+    title: "Milestone end: M4 complete (gate on CI)"
+    depends_on: [M4.2]
+  - id: CI.FIX.M4
+    title: "CI fix: make GitHub Actions green for M4 boundary"
+    depends_on: [M4.END]

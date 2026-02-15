@@ -101,4 +101,53 @@ tasks:
       tick_ts: 20260215T150003Z
     status: done
     updated_at_utc: ''
+  M0.END:
+    status: todo
+    updated_at_utc: ''
+  CI.FIX.M0:
+    status: todo
+    updated_at_utc: ''
+  M1.END:
+    status: todo
+    updated_at_utc: ''
+  CI.FIX.M1:
+    status: todo
+    updated_at_utc: ''
+  M2.END:
+    status: todo
+    updated_at_utc: ''
+  CI.FIX.M2:
+    status: todo
+    updated_at_utc: ''
+  M3.2:
+    status: todo
+    updated_at_utc: ''
+  M3.3:
+    status: todo
+    updated_at_utc: ''
+  M3.4:
+    status: todo
+    updated_at_utc: ''
+  M3.END:
+    status: todo
+    updated_at_utc: ''
+  CI.FIX.M3:
+    status: todo
+    updated_at_utc: ''
+  M4.0:
+    status: todo
+    updated_at_utc: ''
+  M4.1:
+    status: todo
+    updated_at_utc: ''
+  M4.2:
+    status: todo
+    updated_at_utc: ''
+  M4.END:
+    status: todo
+    updated_at_utc: ''
+  CI.FIX.M4:
+    status: todo
+    updated_at_utc: ''
 version: 1
+ci: {}
