@@ -185,7 +185,7 @@ tasks:
     status: done
     updated_at_utc: '2026-02-15T23:34:48Z'
     last:
-      commit: 295423e82051db133cdb6957dba821c4506d5251
+      commit: 09fc50bfe8cd256c4122807953099f80ac238fa8
       log_path: /home/kana/.openclaw/workspace/portfolio/reports/runs/20260215T233006Z/logs/letterboxd-recommender.log
       outcome: success
       pushed: true
