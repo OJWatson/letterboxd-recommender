@@ -20,6 +20,24 @@ Query params:
 - `list_kind`: `watched` (default), `watchlist`, or `all`
 - `top_n`: 1–50 (default 10)
 
+### Recommendations
+
+```bash
+curl -X POST http://localhost:8000/api/recommend \
+  -H 'content-type: application/json' \
+  -d '{"username":"<username>","k":5}'
+```
+
+### Evaluate a candidate film (feature contributions)
+
+Returns a weighted score plus the top contributing feature groups (genres / directors / decades).
+
+```bash
+curl -X POST http://localhost:8000/api/evaluate \
+  -H 'content-type: application/json' \
+  -d '{"username":"<username>","film_id":"the-matrix","top_n":3}'
+```
+
 ## Dev
 
 ```bash
