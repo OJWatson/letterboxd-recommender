@@ -42,6 +42,13 @@ def _meta_fixture(slug: str) -> FilmMetadata:
             genres=["Drama"],
             directors=["Another Person"],
         ),
+        "cand-3": FilmMetadata(
+            slug="cand-3",
+            title="Cand 3",
+            year=2001,
+            genres=["Action"],
+            directors=["Someone Else"],
+        ),
     }
     return fixtures.get(slug) or FilmMetadata(slug=slug, title=slug, year=None)
 
@@ -100,6 +107,11 @@ def test_ranking_changes_when_features_change(monkeypatch, data_dir: Path) -> No
     recs = recommend_for_user("alice", k=2, data_dir=data_dir, metadata_provider=_meta_fixture)
     assert [r.film_id for r in recs] == ["cand-1", "cand-2"]
 
+    # Explainability fields should be present and consistent.
+    assert recs[0].score >= recs[1].score
+    assert recs[0].score_breakdown["weighted_score"] == pytest.approx(recs[0].score)
+    assert "genres" in recs[0].overlaps
+
     def meta_changed(slug: str) -> FilmMetadata:
         if slug == "cand-1":
             # remove overlap
@@ -116,3 +128,22 @@ def test_ranking_changes_when_features_change(monkeypatch, data_dir: Path) -> No
         "alice", k=2, data_dir=data_dir, metadata_provider=meta_changed
     )
     assert [r.film_id for r in recs_changed] == ["cand-2", "cand-1"]
+
+
+def test_candidate_filtering_prefers_overlap_when_possible(monkeypatch, data_dir: Path) -> None:
+    persist_ingest(
+        IngestedLists(username="alice", watched=["watched-a"], watchlist=[]),
+        data_dir=data_dir,
+    )
+
+    # cand-1 overlaps (Sci-Fi + 1990s). cand-3 overlaps (Action). cand-2 has no overlap.
+    monkeypatch.setattr(
+        "letterboxd_recommender.core.recommender.POPULAR_FILM_SLUGS",
+        ["cand-2", "cand-1", "cand-3"],
+    )
+
+    recs = recommend_for_user("alice", k=2, data_dir=data_dir, metadata_provider=_meta_fixture)
+    assert [r.film_id for r in recs] == ["cand-1", "cand-3"]
+    assert all(
+        r.overlaps["genres"] or r.overlaps["directors"] or r.overlaps["decades"] for r in recs
+    )

@@ -78,6 +78,9 @@ def recommend(req: RecommendRequest) -> RecommendResponse:
                     "year": r.year,
                     "blurb": r.blurb,
                     "why": r.why,
+                    "score": r.score,
+                    "score_breakdown": r.score_breakdown,
+                    "overlaps": r.overlaps,
                 }
                 for r in recs
             ],

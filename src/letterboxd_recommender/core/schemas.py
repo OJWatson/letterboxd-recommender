@@ -22,6 +22,11 @@ class Recommendation(BaseModel):
     blurb: str
     why: str
 
+    # M2.3: basic scoring explainability
+    score: float | None = None
+    score_breakdown: dict[str, float] | None = None
+    overlaps: dict[str, list[str]] | None = None
+
 
 class RecommendResponse(BaseModel):
     username: str
