@@ -20,6 +20,12 @@ Query params:
 - `list_kind`: `watched` (default), `watchlist`, or `all`
 - `top_n`: 1–50 (default 10)
 
+### HTML report page (infographic + recommendations)
+
+```bash
+open "http://localhost:8000/users/<username>/report?list_kind=watched&top_n=10&k=5"
+```
+
 ### Recommendations
 
 ```bash
