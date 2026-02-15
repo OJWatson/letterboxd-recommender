@@ -122,8 +122,15 @@ tasks:
       reason: completed
       tick_ts: 20260215T180005Z
   M1.END:
-    status: todo
-    updated_at_utc: ''
+    last:
+      commit: __PENDING_COMMIT__
+      log_path: /home/kana/.openclaw/workspace/portfolio/reports/runs/20260215T183005Z/logs/letterboxd-recommender.log
+      outcome: success
+      pushed: false
+      reason: completed
+      tick_ts: 20260215T183005Z
+    status: done
+    updated_at_utc: '2026-02-15T18:34:40Z'
   CI.FIX.M1:
     status: todo
     updated_at_utc: ''
