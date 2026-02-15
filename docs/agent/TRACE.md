@@ -7,3 +7,7 @@ This file records task-by-task execution notes for the portfolio automation.
   - Core: `core/letterboxd_ingest.py` (RSS fetch + parse + persist)
   - API: `POST /api/users/{username}/ingest`
   - Tests cover RSS parsing and persistence via API route.
+- M2.4: Added evaluation endpoint returning top feature contributions to similarity score.
+  - API: `POST /api/evaluate` (username, film_id, top_n)
+  - Core: `core/recommender.py::top_feature_contributions` (genres/directors/decades contributions)
+  - Tests cover endpoint output + 404 when user not ingested.

@@ -59,6 +59,12 @@ POPULAR_FILM_SLUGS: list[str] = [
 ]
 
 
+# Scoring weights for the transparent, heuristic recommender.
+GENRE_WEIGHT = 0.5
+DIRECTOR_WEIGHT = 0.3
+DECADE_WEIGHT = 0.2
+
+
 @dataclass(frozen=True)
 class RecommendationItem:
     film_id: str
@@ -69,6 +75,15 @@ class RecommendationItem:
     score: float
     score_breakdown: dict[str, float]
     overlaps: dict[str, list[str]]
+
+
+@dataclass(frozen=True)
+class FeatureContribution:
+    feature: str
+    similarity: float
+    weight: float
+    contribution: float
+    overlaps: list[str]
 
 
 @dataclass(frozen=True)
@@ -143,7 +158,11 @@ def _similarity_score(
     director_sim = _jaccard(profile_directors, cand_directors)
 
     # Keep weights simple + explicit.
-    score = (0.5 * genre_sim) + (0.3 * director_sim) + (0.2 * decade_sim)
+    score = (
+        (GENRE_WEIGHT * genre_sim)
+        + (DIRECTOR_WEIGHT * director_sim)
+        + (DECADE_WEIGHT * decade_sim)
+    )
 
     overlaps: dict[str, list[str]] = {
         "genres": sorted(profile_genres & cand_genres)[:3],
@@ -163,6 +182,9 @@ def _similarity_score(
         "genres": genre_sim,
         "directors": director_sim,
         "decades": decade_sim,
+        "genres_contribution": GENRE_WEIGHT * genre_sim,
+        "directors_contribution": DIRECTOR_WEIGHT * director_sim,
+        "decades_contribution": DECADE_WEIGHT * decade_sim,
         "weighted_score": score,
     }
 
@@ -180,6 +202,67 @@ def _similarity_score(
 
 def _has_any_overlap(overlaps: dict[str, list[str]]) -> bool:
     return bool(overlaps.get("genres") or overlaps.get("directors") or overlaps.get("decades"))
+
+
+def top_feature_contributions(
+    username: str,
+    film_id: str,
+    *,
+    data_dir: Path | None = None,
+    metadata_provider: Callable[[str], FilmMetadata] | None = None,
+    top_n: int = 3,
+) -> tuple[float, list[FeatureContribution]]:
+    """Return the weighted score + top contributing features for a candidate film.
+
+    This is used by the evaluation endpoint (M2.4).
+
+    Args:
+        top_n: number of contributions to return (sorted by contribution desc).
+    """
+
+    if not username:
+        raise RecommendationError("username is required")
+
+    if not film_id:
+        raise RecommendationError("film_id is required")
+
+    if top_n < 1:
+        raise RecommendationError("top_n must be >= 1")
+
+    lists = load_ingested_lists(username, data_dir=data_dir)
+    provider = metadata_provider or (lambda slug: get_film_metadata(slug, data_dir=data_dir))
+
+    profile = _build_user_profile(lists.watched, provider=provider)
+    candidate = provider(film_id)
+
+    score, _, breakdown, overlaps = _similarity_score(profile, candidate)
+
+    contributions = [
+        FeatureContribution(
+            feature="genres",
+            similarity=breakdown["genres"],
+            weight=GENRE_WEIGHT,
+            contribution=breakdown["genres_contribution"],
+            overlaps=overlaps.get("genres", []),
+        ),
+        FeatureContribution(
+            feature="directors",
+            similarity=breakdown["directors"],
+            weight=DIRECTOR_WEIGHT,
+            contribution=breakdown["directors_contribution"],
+            overlaps=overlaps.get("directors", []),
+        ),
+        FeatureContribution(
+            feature="decades",
+            similarity=breakdown["decades"],
+            weight=DECADE_WEIGHT,
+            contribution=breakdown["decades_contribution"],
+            overlaps=overlaps.get("decades", []),
+        ),
+    ]
+
+    contributions.sort(key=lambda item: (-item.contribution, item.feature))
+    return score, contributions[:top_n]
 
 
 def recommend_for_user(

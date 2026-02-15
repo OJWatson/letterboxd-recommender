@@ -15,6 +15,12 @@ class RecommendRequest(BaseModel):
     k: int = Field(default=5, ge=1, le=20)
 
 
+class EvaluateRequest(BaseModel):
+    username: str
+    film_id: str
+    top_n: int = Field(default=3, ge=1, le=10)
+
+
 class Recommendation(BaseModel):
     film_id: str
     title: str
@@ -31,6 +37,21 @@ class Recommendation(BaseModel):
 class RecommendResponse(BaseModel):
     username: str
     recommendations: list[Recommendation]
+
+
+class FeatureContributionItem(BaseModel):
+    feature: str
+    similarity: float
+    weight: float
+    contribution: float
+    overlaps: list[str]
+
+
+class EvaluateResponse(BaseModel):
+    username: str
+    film_id: str
+    score: float
+    top_features: list[FeatureContributionItem]
 
 
 class CountItem(BaseModel):

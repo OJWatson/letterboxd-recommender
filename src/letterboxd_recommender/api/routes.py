@@ -11,6 +11,8 @@ from letterboxd_recommender.core.letterboxd_ingest import (
     persist_ingest,
 )
 from letterboxd_recommender.core.schemas import (
+    EvaluateRequest,
+    EvaluateResponse,
     InfographicSummaryResponse,
     IngestResponse,
     RecommendRequest,
@@ -87,5 +89,38 @@ def recommend(req: RecommendRequest) -> RecommendResponse:
         )
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@router.post("/api/evaluate", response_model=EvaluateResponse)
+def evaluate(req: EvaluateRequest) -> EvaluateResponse:
+    from letterboxd_recommender.core.recommender import top_feature_contributions
+
+    try:
+        score, top_features = top_feature_contributions(
+            req.username,
+            req.film_id,
+            top_n=req.top_n,
+        )
+        return EvaluateResponse(
+            username=req.username,
+            film_id=req.film_id,
+            score=score,
+            top_features=[
+                {
+                    "feature": f.feature,
+                    "similarity": f.similarity,
+                    "weight": f.weight,
+                    "contribution": f.contribution,
+                    "overlaps": f.overlaps,
+                }
+                for f in top_features
+            ],
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except FilmMetadataError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
