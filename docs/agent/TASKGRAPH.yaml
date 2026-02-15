@@ -23,4 +23,24 @@ tasks:
   - M2.1
   id: M2.2
   title: 'Improve recommender: add simple similarity scoring and ranking tests'
+- depends_on:
+  - M2.2
+  id: M2.3
+  title: 'Recommender v2: add basic candidate filtering + scoring explainability'
+- depends_on:
+  - M2.3
+  id: M2.4
+  title: 'Add evaluation endpoint: return top features contributing to score'
+- depends_on:
+  - M2.4
+  id: M2.5
+  title: Persist user ingest + derived features with versioned cache key
+- depends_on:
+  - M2.5
+  id: M3.0
+  title: Expose simple HTML report page for infographic + recommendations
+- depends_on:
+  - M3.0
+  id: M3.1
+  title: Add smoke E2E test for ingest -> recommend flow
 version: 1

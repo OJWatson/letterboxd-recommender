@@ -51,4 +51,54 @@ tasks:
       tick_ts: 20260215T080711Z
     status: done
     updated_at_utc: ''
+  M2.3:
+    last:
+      commit: ''
+      log_path: ''
+      outcome: ''
+      pushed: null
+      reason: ''
+      tick_ts: ''
+    status: todo
+    updated_at_utc: ''
+  M2.4:
+    last:
+      commit: ''
+      log_path: ''
+      outcome: ''
+      pushed: null
+      reason: ''
+      tick_ts: ''
+    status: todo
+    updated_at_utc: ''
+  M2.5:
+    last:
+      commit: ''
+      log_path: ''
+      outcome: ''
+      pushed: null
+      reason: ''
+      tick_ts: ''
+    status: todo
+    updated_at_utc: ''
+  M3.0:
+    last:
+      commit: ''
+      log_path: ''
+      outcome: ''
+      pushed: null
+      reason: ''
+      tick_ts: ''
+    status: todo
+    updated_at_utc: ''
+  M3.1:
+    last:
+      commit: ''
+      log_path: ''
+      outcome: ''
+      pushed: null
+      reason: ''
+      tick_ts: ''
+    status: todo
+    updated_at_utc: ''
 version: 1
