@@ -73,13 +73,13 @@ tasks:
     updated_at_utc: ''
   M2.5:
     last:
-      commit: ''
-      log_path: ''
-      outcome: ''
-      pushed: null
-      reason: ''
-      tick_ts: ''
-    status: todo
+      commit: 8922378174d8112c156bb36705c2acefb18f2202
+      log_path: /home/kana/.openclaw/workspace/portfolio/reports/runs/20260215T133004Z/logs/letterboxd-recommender.log
+      outcome: success
+      pushed: true
+      reason: completed
+      tick_ts: 20260215T133004Z
+    status: done
     updated_at_utc: ''
   M3.0:
     last:
