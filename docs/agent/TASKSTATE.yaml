@@ -135,7 +135,7 @@ tasks:
     status: done
     updated_at_utc: '2026-02-15T19:04:39Z'
     last:
-      commit: TBD
+      commit: c6aed46
       log_path: /home/kana/.openclaw/workspace/portfolio/reports/runs/20260215T190005Z/logs/letterboxd-recommender.log
       outcome: success
       pushed: true
