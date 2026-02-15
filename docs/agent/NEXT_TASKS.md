@@ -1,12 +1,13 @@
 # NEXT_TASKS
 
 Now:
-- M3.0 — Expose simple HTML report page for infographic + recommendations
-
-Next:
 - M3.1 — Add smoke E2E test for ingest -> recommend flow
 
+Next:
+- (none)
+
 Done:
+- M3.0 — Expose simple HTML report page for infographic + recommendations
 - M2.5 — Persist user ingest + derived features with versioned cache key
 - M0.2 — Implement Letterboxd data ingestion (watched + watchlist)
 - M1.1 — Construct internal dataframe + feature engineering scaffold
