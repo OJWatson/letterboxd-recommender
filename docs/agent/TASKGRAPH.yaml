@@ -1,0 +1,26 @@
+defaults:
+  acceptance:
+  - uv run ruff check .
+  - uv run pytest -q
+project_id: letterboxd-recommender
+tasks:
+- depends_on: []
+  id: M0.2
+  title: Implement Letterboxd data ingestion (watched + watchlist)
+- depends_on:
+  - M0.2
+  id: M1.1
+  title: Construct internal dataframe + feature engineering scaffold
+- depends_on:
+  - M1.1
+  id: M1.2
+  title: Generate infographic summary and expose endpoint
+- depends_on:
+  - M1.2
+  id: M2.1
+  title: 'Base recommender: return 5 recommendations excluding watched/watchlist'
+- depends_on:
+  - M2.1
+  id: M2.2
+  title: 'Improve recommender: add simple similarity scoring and ranking tests'
+version: 1

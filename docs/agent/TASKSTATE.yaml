@@ -1,0 +1,54 @@
+project_id: letterboxd-recommender
+repo_status: RUNNING
+tasks:
+  M0.2:
+    last:
+      commit: 00b8bad
+      log_path: ''
+      outcome: success
+      pushed: true
+      reason: completed_before_taskgraph
+      tick_ts: ''
+    status: done
+    updated_at_utc: ''
+  M1.1:
+    last:
+      commit: 6d24aff
+      log_path: ''
+      outcome: success
+      pushed: true
+      reason: completed_before_taskgraph
+      tick_ts: ''
+    status: done
+    updated_at_utc: ''
+  M1.2:
+    last:
+      commit: 7c727ae
+      log_path: ''
+      outcome: success
+      pushed: true
+      reason: completed_before_taskgraph
+      tick_ts: ''
+    status: done
+    updated_at_utc: ''
+  M2.1:
+    last:
+      commit: bb8a4bf
+      log_path: ''
+      outcome: success
+      pushed: true
+      reason: completed_before_taskgraph
+      tick_ts: ''
+    status: done
+    updated_at_utc: ''
+  M2.2:
+    last:
+      commit: ''
+      log_path: ''
+      outcome: ''
+      pushed: null
+      reason: ''
+      tick_ts: ''
+    status: todo
+    updated_at_utc: ''
+version: 1
