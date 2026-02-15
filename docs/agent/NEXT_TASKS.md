@@ -1,13 +1,13 @@
 # NEXT_TASKS
 
 Now:
-- M2.5 — Persist user ingest + derived features with versioned cache key
+- M3.0 — Expose simple HTML report page for infographic + recommendations
 
 Next:
-- M3.0 — Expose simple HTML report page for infographic + recommendations
 - M3.1 — Add smoke E2E test for ingest -> recommend flow
 
 Done:
+- M2.5 — Persist user ingest + derived features with versioned cache key
 - M0.2 — Implement Letterboxd data ingestion (watched + watchlist)
 - M1.1 — Construct internal dataframe + feature engineering scaffold
 - M1.2 — Generate infographic summary (genres/decades/directors) and expose endpoint

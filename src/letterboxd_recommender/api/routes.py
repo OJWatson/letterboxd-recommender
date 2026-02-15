@@ -32,6 +32,12 @@ def ingest(username: str) -> IngestResponse:
     try:
         result = ingest_user(username)
         persist_ingest(result)
+
+        # Cache derived user features (internal dataframe) with a versioned cache key.
+        from letterboxd_recommender.core.dataframe import build_or_load_user_films_df
+
+        build_or_load_user_films_df(username)
+
         return IngestResponse(
             username=username,
             watched_count=len(result.watched),

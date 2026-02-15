@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -22,12 +24,25 @@ EXPECTED_USER_FILMS_COLUMNS: Final[set[str]] = {
     "watchlist_position",
 }
 
+# Bump this when the user-film dataframe schema or feature engineering changes.
+USER_FILMS_CACHE_VERSION: Final[str] = "v1"
+
 
 @dataclass(frozen=True)
 class UserDataPaths:
     user_dir: Path
     watched_path: Path
     watchlist_path: Path
+
+
+@dataclass(frozen=True)
+class UserDerivedDataPaths:
+    """Paths for derived/engineered features cached on disk."""
+
+    user_dir: Path
+    cache_dir: Path
+    user_films_df_path: Path
+    manifest_path: Path
 
 
 def user_data_paths(username: str, *, data_dir: Path | None = None) -> UserDataPaths:
@@ -37,6 +52,53 @@ def user_data_paths(username: str, *, data_dir: Path | None = None) -> UserDataP
         user_dir=user_dir,
         watched_path=user_dir / "watched.txt",
         watchlist_path=user_dir / "watchlist.txt",
+    )
+
+
+def _slug_digest(slugs: list[str]) -> str:
+    h = hashlib.sha256()
+    for slug in slugs:
+        h.update(slug.encode("utf-8"))
+        h.update(b"\n")
+    return h.hexdigest()
+
+
+def user_features_cache_key(lists: IngestedLists) -> str:
+    """Compute a versioned cache key for derived user features.
+
+    The key changes when either:
+      - the ingested lists change (watched/watchlist slugs)
+      - USER_FILMS_CACHE_VERSION is bumped
+
+    This keeps cached derived features safe to reuse across runs.
+    """
+
+    watched_digest = _slug_digest(lists.watched)
+    watchlist_digest = _slug_digest(lists.watchlist)
+
+    h = hashlib.sha256()
+    h.update(USER_FILMS_CACHE_VERSION.encode("utf-8"))
+    h.update(b"\0")
+    h.update(watched_digest.encode("utf-8"))
+    h.update(b"\0")
+    h.update(watchlist_digest.encode("utf-8"))
+
+    return f"user-films-df-{USER_FILMS_CACHE_VERSION}-{h.hexdigest()[:16]}"
+
+
+def user_derived_data_paths(
+    username: str,
+    *,
+    cache_key: str,
+    data_dir: Path | None = None,
+) -> UserDerivedDataPaths:
+    paths = user_data_paths(username, data_dir=data_dir)
+    cache_dir = paths.user_dir / "cache" / cache_key
+    return UserDerivedDataPaths(
+        user_dir=paths.user_dir,
+        cache_dir=cache_dir,
+        user_films_df_path=cache_dir / "user_films_df.json",
+        manifest_path=cache_dir / "manifest.json",
     )
 
 
@@ -164,10 +226,84 @@ def add_basic_features(
     return out
 
 
+def load_cached_user_films_df(
+    username: str,
+    *,
+    data_dir: Path | None = None,
+) -> tuple[str, pd.DataFrame] | None:
+    """Load the cached user-film dataframe if present.
+
+    Returns:
+        (cache_key, df) if a cache exists for the current ingested lists,
+        otherwise None.
+    """
+
+    lists = load_ingested_lists(username, data_dir=data_dir)
+    cache_key = user_features_cache_key(lists)
+    derived = user_derived_data_paths(username, cache_key=cache_key, data_dir=data_dir)
+
+    if not derived.user_films_df_path.exists():
+        return None
+
+    df = pd.read_json(derived.user_films_df_path, orient="records")
+    validate_user_films_df(df)
+    return cache_key, df
+
+
+def persist_user_films_df(
+    df: pd.DataFrame,
+    *,
+    username: str,
+    cache_key: str,
+    data_dir: Path | None = None,
+) -> UserDerivedDataPaths:
+    derived = user_derived_data_paths(username, cache_key=cache_key, data_dir=data_dir)
+    derived.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    # JSON is used to preserve basic dtypes (bool/int/float) without requiring
+    # optional parquet backends.
+    df.to_json(derived.user_films_df_path, orient="records", indent=2)
+
+    manifest = {
+        "username": username,
+        "cache_key": cache_key,
+        "cache_version": USER_FILMS_CACHE_VERSION,
+        "row_count": int(df.shape[0]),
+        "columns": list(df.columns),
+    }
+    derived.manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+    return derived
+
+
+def build_or_load_user_films_df(
+    username: str,
+    *,
+    data_dir: Path | None = None,
+    force_rebuild: bool = False,
+) -> tuple[str, pd.DataFrame]:
+    """Load the derived user-film dataframe, building and caching if needed."""
+
+    lists = load_ingested_lists(username, data_dir=data_dir)
+    cache_key = user_features_cache_key(lists)
+
+    if not force_rebuild:
+        cached = load_cached_user_films_df(username, data_dir=data_dir)
+        if cached is not None:
+            return cached
+
+    df = build_user_films_df(lists)
+    persist_user_films_df(df, username=username, cache_key=cache_key, data_dir=data_dir)
+    return cache_key, df
+
+
 def build_user_films_df_for_username(
     username: str, *, data_dir: Path | None = None
 ) -> pd.DataFrame:
-    """Convenience helper: load persisted lists and build the internal dataframe."""
+    """Convenience helper: load persisted lists and build the internal dataframe.
 
-    lists = load_ingested_lists(username, data_dir=data_dir)
-    return build_user_films_df(lists)
+    Uses a versioned on-disk cache to avoid recomputing derived features.
+    """
+
+    _, df = build_or_load_user_films_df(username, data_dir=data_dir)
+    return df
