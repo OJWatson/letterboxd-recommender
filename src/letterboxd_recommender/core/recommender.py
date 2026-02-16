@@ -5,7 +5,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from letterboxd_recommender.core.dataframe import load_ingested_lists
-from letterboxd_recommender.core.film_metadata import FilmMetadata, get_film_metadata
+from letterboxd_recommender.core.film_metadata import (
+    FilmMetadata,
+    FilmMetadataError,
+    get_film_metadata,
+)
 from letterboxd_recommender.core.nlp import RefinementConstraints, parse_refinement_prompt
 
 
@@ -64,6 +68,8 @@ POPULAR_FILM_SLUGS: list[str] = [
 GENRE_WEIGHT = 0.5
 DIRECTOR_WEIGHT = 0.3
 DECADE_WEIGHT = 0.2
+PROFILE_SAMPLE_LIMIT = 50
+METADATA_FAILURE_FAST_FALLBACK_THRESHOLD = 6
 
 
 @dataclass(frozen=True)
@@ -94,6 +100,30 @@ class _UserProfile:
     directors: frozenset[str]
 
 
+def _fallback_recommendation(slug: str) -> RecommendationItem:
+    return RecommendationItem(
+        film_id=slug,
+        title=slug.replace("-", " ").title(),
+        year=None,
+        blurb="Fallback recommendation from curated popular pool.",
+        why=(
+            "Metadata was unavailable for detailed matching; "
+            "this is a safe fallback pick."
+        ),
+        score=0.0,
+        score_breakdown={
+            "genres": 0.0,
+            "directors": 0.0,
+            "decades": 0.0,
+            "genres_contribution": 0.0,
+            "directors_contribution": 0.0,
+            "decades_contribution": 0.0,
+            "weighted_score": 0.0,
+        },
+        overlaps={"genres": [], "directors": [], "decades": []},
+    )
+
+
 def _decade_label(year: int) -> str:
     decade = (year // 10) * 10
     return f"{decade}s"
@@ -117,8 +147,16 @@ def _build_user_profile(
     decades: set[str] = set()
     directors: set[str] = set()
 
-    for slug in watched_slugs:
-        meta = provider(slug)
+    metadata_failures = 0
+    for slug in watched_slugs[:PROFILE_SAMPLE_LIMIT]:
+        try:
+            meta = provider(slug)
+        except FilmMetadataError:
+            # Ignore unavailable metadata to keep recommendation flow alive.
+            metadata_failures += 1
+            if metadata_failures >= METADATA_FAILURE_FAST_FALLBACK_THRESHOLD:
+                break
+            continue
         genres.update(meta.genres or [])
         directors.update(meta.directors or [])
         if meta.year is not None:
@@ -302,7 +340,10 @@ def _resolve_similar_to_slug(
 
     # Try to find by title within our known candidate set.
     for slug in candidates:
-        meta = provider(slug)
+        try:
+            meta = provider(slug)
+        except FilmMetadataError:
+            continue
         if meta.title and _normalise_text_token(meta.title) == wanted:
             return slug
 
@@ -421,8 +462,11 @@ def recommend_for_user(
             provider=provider,
         )
         if resolved:
-            similar_meta = provider(resolved)
-            exclude.add(resolved)
+            try:
+                similar_meta = provider(resolved)
+                exclude.add(resolved)
+            except FilmMetadataError:
+                similar_meta = None
 
     profile = _build_user_profile(lists.watched, provider=provider)
 
@@ -431,12 +475,33 @@ def recommend_for_user(
     # Collect all candidates first so we can do a strict->relaxed two-pass filter
     # without losing deterministic ordering.
     candidates: list[tuple[int, float, bool, RecommendationItem]] = []
+    metadata_failures = 0
 
     for idx, slug in enumerate(POPULAR_FILM_SLUGS):
         if slug in exclude:
             continue
 
-        meta = provider(slug)
+        try:
+            meta = provider(slug)
+        except FilmMetadataError:
+            # Fallback candidate when metadata endpoints are blocked.
+            metadata_failures += 1
+            candidates.append(
+                (
+                    idx,
+                    0.0,
+                    False,
+                    _fallback_recommendation(slug),
+                )
+            )
+            if metadata_failures >= METADATA_FAILURE_FAST_FALLBACK_THRESHOLD:
+                for j in range(idx + 1, len(POPULAR_FILM_SLUGS)):
+                    rem_slug = POPULAR_FILM_SLUGS[j]
+                    if rem_slug in exclude:
+                        continue
+                    candidates.append((j, 0.0, False, _fallback_recommendation(rem_slug)))
+                break
+            continue
         if not _matches_constraints(meta, constraints, similar_to=similar_meta):
             continue
 

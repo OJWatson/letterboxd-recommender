@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from letterboxd_recommender.api.app import create_app
-from letterboxd_recommender.core.film_metadata import FilmMetadata
+from letterboxd_recommender.core.film_metadata import FilmMetadata, FilmMetadataError
 from letterboxd_recommender.core.infographic import build_infographic_summary
 from letterboxd_recommender.core.letterboxd_ingest import IngestedLists, persist_ingest
 
@@ -104,3 +104,30 @@ def test_infographic_endpoint_uses_persisted_lists(tmp_path: Path, monkeypatch) 
     assert {x["name"] for x in body["runtime_distribution"]} == {"110-129m", "150m+"}
 
     assert {x["name"] for x in body["top_directors"]} == {"Ridley Scott", "Michael Mann"}
+
+
+def test_build_infographic_summary_skips_unavailable_film_metadata(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("LETTERBOXD_RECOMMENDER_DATA_DIR", str(tmp_path / "data"))
+
+    persist_ingest(
+        IngestedLists(username="alice", watched=["alien", "heat"], watchlist=[]),
+        data_dir=tmp_path / "data",
+    )
+
+    def provider(slug: str) -> FilmMetadata:
+        if slug == "heat":
+            raise FilmMetadataError("blocked")
+        return _fake_meta(slug)
+
+    summary = build_infographic_summary(
+        "alice",
+        list_kind="watched",
+        top_n=10,
+        data_dir=tmp_path / "data",
+        metadata_provider=provider,
+    )
+
+    assert summary.film_count == 2
+    assert dict(summary.top_directors) == {"Ridley Scott": 1}

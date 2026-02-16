@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from letterboxd_recommender.core.film_metadata import FilmMetadata
+from letterboxd_recommender.core.film_metadata import FilmMetadata, FilmMetadataError
 from letterboxd_recommender.core.letterboxd_ingest import IngestedLists, persist_ingest
 from letterboxd_recommender.core.recommender import recommend_for_user
 
@@ -147,3 +147,31 @@ def test_candidate_filtering_prefers_overlap_when_possible(monkeypatch, data_dir
     assert all(
         r.overlaps["genres"] or r.overlaps["directors"] or r.overlaps["decades"] for r in recs
     )
+
+
+def test_recommend_skips_candidates_with_unavailable_metadata(
+    monkeypatch, data_dir: Path
+) -> None:
+    persist_ingest(
+        IngestedLists(username="alice", watched=["watched-a"], watchlist=[]),
+        data_dir=data_dir,
+    )
+
+    monkeypatch.setattr(
+        "letterboxd_recommender.core.recommender.POPULAR_FILM_SLUGS",
+        ["cand-1", "cand-2"],
+    )
+
+    def flaky_provider(slug: str) -> FilmMetadata:
+        if slug == "cand-1":
+            raise FilmMetadataError("parse failed")
+        return _meta_fixture(slug)
+
+    recs = recommend_for_user(
+        "alice",
+        k=2,
+        data_dir=data_dir,
+        metadata_provider=flaky_provider,
+    )
+    assert len(recs) == 2
+    assert {r.film_id for r in recs} == {"cand-1", "cand-2"}

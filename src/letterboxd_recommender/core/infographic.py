@@ -7,9 +7,15 @@ from pathlib import Path
 from typing import Literal
 
 from letterboxd_recommender.core.dataframe import load_ingested_lists
-from letterboxd_recommender.core.film_metadata import FilmMetadata, get_film_metadata
+from letterboxd_recommender.core.film_metadata import (
+    FilmMetadata,
+    FilmMetadataError,
+    get_film_metadata,
+)
 
 ListKind = Literal["watched", "watchlist", "all"]
+INFOGRAPHIC_SAMPLE_LIMIT = 50
+METADATA_FAILURE_BREAK_THRESHOLD = 8
 
 
 @dataclass(frozen=True)
@@ -80,8 +86,16 @@ def build_infographic_summary(
     runtimes: list[int] = []
     global_ratings: list[float] = []
 
-    for slug in slugs:
-        meta = provider(slug)
+    metadata_failures = 0
+    for slug in slugs[:INFOGRAPHIC_SAMPLE_LIMIT]:
+        try:
+            meta = provider(slug)
+        except FilmMetadataError:
+            # Gracefully skip films that cannot be parsed/fetched.
+            metadata_failures += 1
+            if metadata_failures >= METADATA_FAILURE_BREAK_THRESHOLD:
+                break
+            continue
 
         for g in meta.genres or []:
             genre_counts[g] += 1
