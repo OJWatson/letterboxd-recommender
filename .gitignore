@@ -8,3 +8,7 @@ build/
 *.egg-info/
 .env
 .DS_Store
+
+# local runtime data
+/data/
+*.sqlite3

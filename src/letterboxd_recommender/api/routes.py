@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import html
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
 from letterboxd_recommender.core.film_metadata import FilmMetadataError
@@ -77,12 +77,12 @@ def infographic_summary(
 
 
 @router.post("/api/recommend", response_model=RecommendResponse)
-def recommend(req: RecommendRequest) -> RecommendResponse:
-    from letterboxd_recommender.api.session import SESSION_STORE
+def recommend(req: RecommendRequest, request: Request) -> RecommendResponse:
     from letterboxd_recommender.core.recommender import recommend_for_user
 
     try:
-        session_id, state = SESSION_STORE.get_or_create(req.session_id)
+        store = request.app.state.session_store
+        session_id, state = store.get_or_create(req.session_id)
 
         recs = recommend_for_user(
             req.username,
@@ -93,6 +93,7 @@ def recommend(req: RecommendRequest) -> RecommendResponse:
 
         # Update per-session exclusion set.
         state.recommended_slugs |= {r.film_id for r in recs}
+        store.save(session_id, state)
 
         return RecommendResponse(
             username=req.username,

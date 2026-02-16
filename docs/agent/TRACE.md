@@ -25,3 +25,8 @@ This file records task-by-task execution notes for the portfolio automation.
   - Route: `GET /` renders a no-build HTML+CSS+JS UI.
   - Features: username input, chat-style refinement prompt, infographic side panel, and session_id persistence via localStorage.
   - Tests: `tests/test_ui.py` covers basic HTML rendering.
+- M4.1: Persisted backend session state + added basic rate limiting and safer error handling.
+  - Sessions: SQLite-backed store (recommended slugs) under `LETTERBOXD_RECOMMENDER_DATA_DIR`.
+  - Rate limiting: lightweight sliding-window middleware (429 on exceed).
+  - App: default exception handler returns 500 without leaking internals.
+  - Tests: `tests/test_session_persistence.py`, `tests/test_rate_limit.py`.
