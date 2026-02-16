@@ -21,3 +21,7 @@ This file records task-by-task execution notes for the portfolio automation.
   - `uv run ruff check .`
   - `uv run pytest -q`
   - `uv run --python 3.10/3.11/3.12 pytest -q`
+- M4.0: Added a minimal single-page UI.
+  - Route: `GET /` renders a no-build HTML+CSS+JS UI.
+  - Features: username input, chat-style refinement prompt, infographic side panel, and session_id persistence via localStorage.
+  - Tests: `tests/test_ui.py` covers basic HTML rendering.

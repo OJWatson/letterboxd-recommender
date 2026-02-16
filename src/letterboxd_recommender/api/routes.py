@@ -1,3 +1,5 @@
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import html
@@ -281,3 +283,210 @@ def user_report(
         raise HTTPException(status_code=502, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@router.get("/", response_class=HTMLResponse)
+def index() -> HTMLResponse:
+    """Minimal single-page UI for the recommender.
+
+    Milestone M4 focuses on a lightweight frontend without bundlers or frameworks.
+    """
+
+    html_doc = """<!doctype html>
+<html lang=\"en\">
+<head>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <title>Letterboxd Recommender</title>
+  <style>
+    :root { --border: #eaeaea; --muted: #666; --bg: #fafafa; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: var(--bg); }
+    header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); background: white; }
+    h1 { margin: 0; font-size: 1.1rem; }
+    .muted { color: var(--muted); }
+    .layout { display: grid; grid-template-columns: 1.2fr .8fr; gap: 1rem; padding: 1rem; max-width: 72rem; margin: 0 auto; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    .card { background: white; border: 1px solid var(--border); border-radius: .75rem; padding: 1rem; }
+    label { display: block; font-size: .9rem; margin-bottom: .25rem; }
+    input, button { font: inherit; }
+    input[type=text] { width: 100%; padding: .55rem .6rem; border: 1px solid var(--border); border-radius: .5rem; }
+    button { padding: .55rem .75rem; border: 1px solid var(--border); border-radius: .5rem; background: #111; color: white; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .row { display: grid; grid-template-columns: 1fr auto; gap: .5rem; align-items: end; }
+    .chat { display: flex; flex-direction: column; gap: .5rem; margin-top: 1rem; }
+    .msg { padding: .6rem .7rem; border-radius: .65rem; max-width: 44rem; white-space: pre-wrap; }
+    .msg.user { align-self: flex-end; background: #111; color: white; }
+    .msg.bot { align-self: flex-start; background: #f4f4f4; border: 1px solid var(--border); }
+    .pill { display: inline-block; padding: .15rem .4rem; border: 1px solid var(--border); border-radius: 999px; font-size: .8rem; background: #fff; }
+    .kv { display: grid; grid-template-columns: 1fr auto; gap: .5rem; }
+    ul { margin: .5rem 0 0 1.1rem; }
+    code { background: #f6f6f6; padding: .1rem .25rem; border-radius: .25rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Letterboxd Recommender</h1>
+    <div class=\"muted\">Enter a Letterboxd username, then refine recommendations via a chat-style prompt.</div>
+  </header>
+
+  <div class=\"layout\">
+    <section class=\"card\">
+      <h2 style=\"margin-top:0\">1) Choose a user</h2>
+      <div class=\"row\">
+        <div>
+          <label for=\"username\">Letterboxd username</label>
+          <input id=\"username\" type=\"text\" placeholder=\"e.g. jack\" autocomplete=\"username\" />
+        </div>
+        <button id=\"load\">Load</button>
+      </div>
+      <div style=\"margin-top:.5rem\" class=\"muted\">
+        Session: <span id=\"session\" class=\"pill\">(none)</span>
+      </div>
+
+      <h2 style=\"margin:1rem 0 0 0\">2) Refine (chat)</h2>
+      <div class=\"chat\" id=\"chat\"></div>
+
+      <div style=\"margin-top: .75rem\" class=\"row\">
+        <div>
+          <label for=\"prompt\">Refinement prompt</label>
+          <input id=\"prompt\" type=\"text\" placeholder=\"e.g. something like Heat, but newer, no horror\" />
+        </div>
+        <button id=\"send\" disabled>Send</button>
+      </div>
+      <div style=\"margin-top: .75rem\" class=\"muted\">
+        Uses <code>POST /api/recommend</code> with <code>session_id</code> to avoid repeating films.
+      </div>
+    </section>
+
+    <aside class=\"card\">
+      <h2 style=\"margin-top:0\">Infographic</h2>
+      <div id=\"infographic\" class=\"muted\">No user loaded.</div>
+    </aside>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function appendMsg(kind, text) {
+      const el = document.createElement('div');
+      el.className = `msg ${kind}`;
+      el.textContent = text;
+      $('chat').appendChild(el);
+      el.scrollIntoView({block: 'end'});
+    }
+
+    function setBusy(busy) {
+      $('load').disabled = busy;
+      $('send').disabled = busy || !$('username').value.trim();
+    }
+
+    function getSessionKey(username) {
+      return `lbrec.session.${username}`;
+    }
+
+    async function apiJSON(url, opts) {
+      const resp = await fetch(url, opts);
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`${resp.status} ${resp.statusText}: ${text}`);
+      }
+      return await resp.json();
+    }
+
+    function renderInfographic(summary) {
+      const box = $('infographic');
+      const top = (items) => {
+        if (!items || items.length === 0) return '<div class="muted"><em>No data</em></div>';
+        const lis = items.map((it) => `<li><strong>${it.name}</strong> — ${it.count}</li>`).join('');
+        return `<ul>${lis}</ul>`;
+      };
+
+      box.className = '';
+      box.innerHTML = `
+        <div class="kv"><div><strong>User</strong></div><div><code>${summary.username}</code></div></div>
+        <div class="kv"><div><strong>List</strong></div><div><span class="pill">${summary.list_kind}</span></div></div>
+        <div class="kv"><div><strong>Films</strong></div><div>${summary.film_count}</div></div>
+        <hr style="border:none;border-top:1px solid var(--border);margin:.75rem 0" />
+        <div><strong>Top genres</strong>${top(summary.top_genres)}</div>
+        <div style="margin-top:.75rem"><strong>Top decades</strong>${top(summary.top_decades)}</div>
+        <div style="margin-top:.75rem"><strong>Top directors</strong>${top(summary.top_directors)}</div>
+      `;
+    }
+
+    async function loadUser(username) {
+      setBusy(true);
+      $('chat').innerHTML = '';
+      appendMsg('bot', `Loading data for ${username}...`);
+
+      await apiJSON(`/api/users/${encodeURIComponent(username)}/ingest`, { method: 'POST' });
+
+      const summary = await apiJSON(`/api/users/${encodeURIComponent(username)}/infographic?list_kind=watched&top_n=10`);
+      renderInfographic(summary);
+
+      const existingSession = localStorage.getItem(getSessionKey(username)) || '';
+      $('session').textContent = existingSession || '(new)';
+
+      await sendPrompt(username, '', existingSession);
+
+      setBusy(false);
+    }
+
+    async function sendPrompt(username, prompt, sessionId) {
+      if (prompt) appendMsg('user', prompt);
+      appendMsg('bot', 'Thinking...');
+
+      try {
+        const payload = { username, k: 5, prompt: prompt || null, session_id: sessionId || null };
+        const rec = await apiJSON('/api/recommend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        localStorage.setItem(getSessionKey(username), rec.session_id);
+        $('session').textContent = rec.session_id;
+
+        const chat = $('chat');
+        chat.removeChild(chat.lastChild);
+
+        if (!rec.recommendations || rec.recommendations.length === 0) {
+          appendMsg('bot', 'No recommendations found. Try changing your refinement prompt.');
+          return;
+        }
+
+        const lines = rec.recommendations.map((r, i) => {
+          const yr = r.year ? ` (${r.year})` : '';
+          const why = r.why ? `\n  - why: ${r.why}` : '';
+          return `${i + 1}. ${r.title}${yr} [${r.film_id}]${why}`;
+        });
+        appendMsg('bot', `Recommendations:\n${lines.join('\n')}`);
+      } catch (err) {
+        const chat = $('chat');
+        if (chat.lastChild) chat.removeChild(chat.lastChild);
+        appendMsg('bot', `Error: ${err.message}`);
+      }
+    }
+
+    $('load').addEventListener('click', async () => {
+      const username = $('username').value.trim();
+      if (!username) return;
+      await loadUser(username);
+    });
+
+    $('send').addEventListener('click', async () => {
+      const username = $('username').value.trim();
+      if (!username) return;
+      const prompt = $('prompt').value.trim();
+      $('prompt').value = '';
+      const sessionId = localStorage.getItem(getSessionKey(username)) || '';
+      await sendPrompt(username, prompt, sessionId);
+    });
+
+    $('username').addEventListener('input', () => {
+      $('send').disabled = !$('username').value.trim();
+    });
+  </script>
+</body>
+</html>"""
+
+    return HTMLResponse(content=html_doc)
