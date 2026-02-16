@@ -30,3 +30,7 @@ This file records task-by-task execution notes for the portfolio automation.
   - Rate limiting: lightweight sliding-window middleware (429 on exceed).
   - App: default exception handler returns 500 without leaking internals.
   - Tests: `tests/test_session_persistence.py`, `tests/test_rate_limit.py`.
+- M4.2: Added deployment documentation + production config knobs.
+  - Docs: `docs/DEPLOYMENT.md`, `.env.example`.
+  - CORS: opt-in CORS middleware configured by `LETTERBOXD_RECOMMENDER_CORS_ORIGINS`.
+  - Tests: `tests/test_cors.py`.
