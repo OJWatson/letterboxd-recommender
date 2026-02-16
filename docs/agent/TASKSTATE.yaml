@@ -228,7 +228,7 @@ tasks:
       commit: 8387c513ff17d34501aa3ddcd65b3b41776b3552
       log_path: /home/kana/.openclaw/workspace/portfolio/reports/runs/20260216T020005Z/logs/letterboxd-recommender.log
       outcome: success
-      pushed: false
+      pushed: true
       reason: completed
       tick_ts: 20260216T020005Z
   M4.2:
