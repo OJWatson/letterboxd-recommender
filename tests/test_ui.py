@@ -16,5 +16,7 @@ def test_index_page_renders_minimal_ui() -> None:
     body = resp.text
     assert "<title>Letterboxd Recommender</title>" in body
     assert "id=\"username\"" in body
+    assert "id=\"export_file\"" in body
+    assert "id=\"import_btn\"" in body
     assert "id=\"prompt\"" in body
     assert "id=\"infographic\"" in body

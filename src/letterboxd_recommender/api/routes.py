@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import html
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
+from letterboxd_recommender.core.export_import import (
+    LetterboxdExportImportError,
+    import_letterboxd_export,
+)
 from letterboxd_recommender.core.film_metadata import FilmMetadataError
 from letterboxd_recommender.core.infographic import build_infographic_summary
 from letterboxd_recommender.core.letterboxd_ingest import (
@@ -18,6 +23,7 @@ from letterboxd_recommender.core.letterboxd_ingest import (
 from letterboxd_recommender.core.schemas import (
     EvaluateRequest,
     EvaluateResponse,
+    ImportExportResponse,
     InfographicSummaryResponse,
     IngestResponse,
     RecommendRequest,
@@ -52,6 +58,33 @@ def ingest(username: str) -> IngestResponse:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except LetterboxdIngestError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@router.post("/api/users/{username}/import-export", response_model=ImportExportResponse)
+async def import_export(
+    username: str, file: Annotated[UploadFile, File(...)]
+) -> ImportExportResponse:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Uploaded file is missing a filename")
+
+    try:
+        content = await file.read()
+        imported = import_letterboxd_export(username, file.filename, content)
+        persist_ingest(imported.lists)
+
+        from letterboxd_recommender.core.dataframe import build_or_load_user_films_df
+
+        build_or_load_user_films_df(username, force_rebuild=True)
+
+        return ImportExportResponse(
+            username=username,
+            watched_count=len(imported.lists.watched),
+            watchlist_count=len(imported.lists.watchlist),
+            list_count=imported.list_count,
+            source=imported.source,
+        )
+    except LetterboxdExportImportError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/api/users/{username}/infographic", response_model=InfographicSummaryResponse)
@@ -483,6 +516,24 @@ def index() -> HTMLResponse:
     .bar-fill { height: 100%; background: var(--bar-fill); }
     .bar-count { font-size: .78rem; color: var(--muted); text-align: right; }
     hr { border: none; border-top: 1px solid var(--line); margin: .8rem 0; }
+    .help {
+      margin-top: .65rem;
+      padding: .6rem .7rem;
+      border: 1px solid var(--line);
+      border-radius: .7rem;
+      background: #1b2a34;
+      font-size: .86rem;
+    }
+    .help ol { margin: .35rem 0 .1rem 1.1rem; padding: 0; }
+    .help a { color: var(--accent-2); }
+    .inline-upload { margin-top: .6rem; }
+    .inline-upload input[type=file] {
+      width: 100%;
+      padding: .45rem;
+      border: 1px dashed var(--line);
+      border-radius: .6rem;
+      background: #1a2832;
+    }
     @keyframes rise {
       from { opacity: 0; transform: translateY(3px); }
       to { opacity: 1; transform: translateY(0); }
@@ -507,7 +558,23 @@ def index() -> HTMLResponse:
           </div>
           <button id=\"load\">Load</button>
         </div>
+        <div class=\"inline-upload\">
+          <label for=\"export_file\">Or upload Letterboxd export (.zip/.csv)</label>
+          <input id=\"export_file\" type=\"file\" accept=\".zip,.csv\" />
+          <div style=\"margin-top:.45rem\">
+            <button id=\"import_btn\">Import Export</button>
+          </div>
+        </div>
         <div style=\"margin-top:.55rem\" class=\"muted\">Session: <span id=\"session\" class=\"pill\">(none)</span></div>
+        <div class=\"help\">
+          <strong>How to export from Letterboxd</strong>
+          <ol>
+            <li>Open Letterboxd and go to <code>Settings</code> -&gt; <code>Data</code>.</li>
+            <li>Request/download your data export (ZIP).</li>
+            <li>Upload the ZIP here, then click <code>Import Export</code>.</li>
+          </ol>
+          <div class=\"muted\">Official data page: <a href=\"https://letterboxd.com/settings/data/\" target=\"_blank\" rel=\"noopener\">letterboxd.com/settings/data/</a></div>
+        </div>
 
         <h2 style=\"margin:1rem 0 0 0\">2) Refine</h2>
         <div class=\"chat\" id=\"chat\"></div>
@@ -547,6 +614,7 @@ def index() -> HTMLResponse:
 
     function setBusy(busy) {
       $('load').disabled = busy;
+      $('import_btn').disabled = busy;
       $('send').disabled = busy || !$('username').value.trim();
     }
 
@@ -638,6 +706,46 @@ def index() -> HTMLResponse:
       setBusy(false);
     }
 
+    async function importExport(username) {
+      const fileInput = $('export_file');
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        appendMsg('bot', 'Choose a .zip or .csv export file first.');
+        return;
+      }
+
+      setBusy(true);
+      $('chat').innerHTML = '';
+      appendMsg('bot', `Importing export for ${username}...`);
+
+      try {
+        const form = new FormData();
+        form.append('file', file);
+
+        const resp = await fetch(`/api/users/${encodeURIComponent(username)}/import-export`, {
+          method: 'POST',
+          body: form,
+        });
+        if (!resp.ok) {
+          const text = await resp.text();
+          throw new Error(`${resp.status} ${resp.statusText}: ${text}`);
+        }
+        const body = await resp.json();
+        appendMsg('bot', `Imported watched=${body.watched_count}, watchlist=${body.watchlist_count}, lists=${body.list_count}.`);
+
+        const summary = await apiJSON(`/api/users/${encodeURIComponent(username)}/infographic?list_kind=watched&top_n=10`);
+        renderInfographic(summary);
+
+        const existingSession = localStorage.getItem(getSessionKey(username)) || '';
+        $('session').textContent = existingSession || '(new)';
+        await sendPrompt(username, '', existingSession);
+      } catch (err) {
+        appendMsg('bot', `Import failed: ${err.message}`);
+      } finally {
+        setBusy(false);
+      }
+    }
+
     async function sendPrompt(username, prompt, sessionId) {
       if (prompt) appendMsg('user', prompt);
       appendMsg('bot', 'Thinking...');
@@ -677,6 +785,12 @@ def index() -> HTMLResponse:
       const username = $('username').value.trim();
       if (!username) return;
       await loadUser(username);
+    });
+
+    $('import_btn').addEventListener('click', async () => {
+      const username = $('username').value.trim();
+      if (!username) return;
+      await importExport(username);
     });
 
     $('send').addEventListener('click', async () => {

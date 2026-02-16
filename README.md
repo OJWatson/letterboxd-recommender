@@ -10,6 +10,15 @@ Backend (FastAPI) for a small web app that ingests a Letterboxd user's watched f
 curl -X POST http://localhost:8000/api/users/<username>/ingest
 ```
 
+### Import from Letterboxd export (recommended for full history)
+
+Upload a Letterboxd data export ZIP (or CSV) for a username:
+
+```bash
+curl -X POST http://localhost:8000/api/users/<username>/import-export \
+  -F "file=@letterboxd-export.zip"
+```
+
 ### Infographic summary (genres / decades / directors)
 
 ```bash

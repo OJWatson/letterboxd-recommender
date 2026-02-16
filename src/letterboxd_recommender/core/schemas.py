@@ -9,6 +9,14 @@ class IngestResponse(BaseModel):
     watchlist_count: int = Field(ge=0)
 
 
+class ImportExportResponse(BaseModel):
+    username: str
+    watched_count: int = Field(ge=0)
+    watchlist_count: int = Field(ge=0)
+    list_count: int = Field(ge=0)
+    source: str
+
+
 class RecommendRequest(BaseModel):
     username: str
     # Optional client-provided session id. If omitted, the API will create one.
