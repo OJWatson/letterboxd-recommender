@@ -35,6 +35,8 @@ def _rss_url(username: str, kind: str) -> str:
         return f"{LETTERBOXD_BASE}/{username}/films/rss/"
     if kind == "watchlist":
         return f"{LETTERBOXD_BASE}/{username}/watchlist/rss/"
+    if kind == "profile":
+        return f"{LETTERBOXD_BASE}/{username}/rss/"
     raise ValueError(f"Unknown kind: {kind}")
 
 
@@ -45,9 +47,20 @@ def _extract_film_slug_from_link(link: str) -> str | None:
         return None
 
     m = _FILM_PATH_RE.match(path)
-    if not m:
-        return None
-    return m.group("slug")
+    if m:
+        return m.group("slug")
+
+    # Also support user-scoped film log URLs:
+    #   /<username>/film/<slug>/
+    #   /<username>/film/<slug>/1/
+    parts = [p for p in path.split("/") if p]
+    if "film" in parts:
+        idx = parts.index("film")
+        if idx + 1 < len(parts):
+            slug = parts[idx + 1].strip()
+            if slug:
+                return slug
+    return None
 
 
 def parse_letterboxd_rss(xml_text: str) -> list[str]:
@@ -121,13 +134,21 @@ def ingest_user(
         close_client = True
 
     try:
-        watched_xml = _fetch_rss(client, _rss_url(username, "watched"))
-        watchlist_xml = _fetch_rss(client, _rss_url(username, "watchlist"))
+        try:
+            watched_xml = _fetch_rss(client, _rss_url(username, "watched"))
+            watchlist_xml = _fetch_rss(client, _rss_url(username, "watchlist"))
+            watched = parse_letterboxd_rss(watched_xml)
+            watchlist = parse_letterboxd_rss(watchlist_xml)
+            return IngestedLists(username=username, watched=watched, watchlist=watchlist)
+        except LetterboxdIngestError as e:
+            # Cloudflare can block list-specific RSS endpoints from server-side clients.
+            # Fall back to profile activity feed for watched titles.
+            if "403" not in str(e):
+                raise
 
-        watched = parse_letterboxd_rss(watched_xml)
-        watchlist = parse_letterboxd_rss(watchlist_xml)
-
-        return IngestedLists(username=username, watched=watched, watchlist=watchlist)
+            profile_xml = _fetch_rss(client, _rss_url(username, "profile"))
+            watched = parse_letterboxd_rss(profile_xml)
+            return IngestedLists(username=username, watched=watched, watchlist=[])
     finally:
         if close_client:
             client.close()

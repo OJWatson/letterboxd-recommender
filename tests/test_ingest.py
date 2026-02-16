@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 from fastapi.testclient import TestClient
 
 from letterboxd_recommender.api import routes
 from letterboxd_recommender.api.app import create_app
-from letterboxd_recommender.core.letterboxd_ingest import IngestedLists
+from letterboxd_recommender.core.letterboxd_ingest import IngestedLists, ingest_user
 
 
 def test_ingest_persists_and_returns_counts(tmp_path: Path, monkeypatch) -> None:
@@ -27,3 +28,26 @@ def test_ingest_persists_and_returns_counts(tmp_path: Path, monkeypatch) -> None
     user_dir = tmp_path / "data" / "users" / "alice"
     assert (user_dir / "watched.txt").read_text() == "alien\nheat\n"
     assert (user_dir / "watchlist.txt").read_text() == "dune\n"
+
+
+def test_ingest_user_falls_back_to_profile_rss_on_403() -> None:
+    class FakeClient:
+        def get(self, url: str):
+            if url.endswith("/films/rss/") or url.endswith("/watchlist/rss/"):
+                return httpx.Response(403, request=httpx.Request("GET", url))
+            if url.endswith("/rss/"):
+                xml = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item><link>https://letterboxd.com/alice/film/alien/</link></item>
+    <item><link>https://letterboxd.com/alice/film/heat/1/</link></item>
+  </channel>
+</rss>
+"""
+                return httpx.Response(200, text=xml, request=httpx.Request("GET", url))
+            return httpx.Response(500, request=httpx.Request("GET", url))
+
+    result = ingest_user("alice", client=FakeClient())  # type: ignore[arg-type]
+    assert result.username == "alice"
+    assert result.watched == ["alien", "heat"]
+    assert result.watchlist == []
