@@ -69,6 +69,10 @@ def infographic_summary(
             top_genres=[{"name": k, "count": v} for k, v in summary.top_genres],
             top_decades=[{"name": k, "count": v} for k, v in summary.top_decades],
             top_directors=[{"name": k, "count": v} for k, v in summary.top_directors],
+            runtime_distribution=[{"name": k, "count": v} for k, v in summary.runtime_distribution],
+            average_runtime_minutes=summary.average_runtime_minutes,
+            average_user_rating=summary.average_user_rating,
+            average_global_rating=summary.average_global_rating,
         )
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
@@ -151,6 +155,12 @@ def evaluate(req: EvaluateRequest) -> EvaluateResponse:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
+def _fmt_nullable(value: float | None, *, digits: int = 2, suffix: str = "") -> str:
+    if value is None:
+        return "n/a"
+    return f"{value:.{digits}f}{suffix}"
+
+
 @router.get("/users/{username}/report", response_class=HTMLResponse)
 def user_report(
     username: str,
@@ -166,35 +176,44 @@ def user_report(
         summary = build_infographic_summary(username, list_kind=list_kind, top_n=top_n)
         recs = recommend_for_user(username, k=k)
 
-        def _render_top(items: list[tuple[str, int]]) -> str:
+        def _render_rows(items: list[tuple[str, int]]) -> str:
             if not items:
-                return "<p><em>No data.</em></p>"
-            lis = "\n".join(
-                f"<li><strong>{html.escape(name)}</strong> — {count}</li>" for name, count in items
-            )
-            return f"<ol>{lis}</ol>"
+                return '<div class="muted"><em>No data.</em></div>'
+
+            max_count = max(c for _, c in items) or 1
+            rows: list[str] = []
+            for name, count in items:
+                width = int((count / max_count) * 100)
+                rows.append(
+                    f"""
+                    <div class="bar-row">
+                      <div class="bar-label">{html.escape(name)}</div>
+                      <div class="bar-track"><div class="bar-fill" style="width:{width}%"></div></div>
+                      <div class="bar-val">{count}</div>
+                    </div>
+                    """
+                )
+            return "\n".join(rows)
 
         rec_items: list[str] = []
         for r in recs:
             year_html = f" <span class=\"year\">({r.year})</span>" if r.year else ""
-            why_html = (
-                f"<div class=\"rec-why\">{html.escape(r.why)}</div>" if r.why else ""
-            )
+            why_html = f"<div class=\"rec-why\">{html.escape(r.why)}</div>" if r.why else ""
             rec_items.append(
                 "\n".join(
                     [
-                        "<li>",
-                        f"<div class=\"rec-title\">{html.escape(r.title)}{year_html}</div>",
+                        '<article class="rec-card">',
+                        f"<h3>{html.escape(r.title)}{year_html}</h3>",
                         (
                             f"<div class=\"rec-meta\"><code>{html.escape(r.film_id)}</code>"
                             f" · score {r.score:.3f}</div>"
                         ),
+                        f"<p>{html.escape(r.blurb)}</p>",
                         why_html,
-                        "</li>",
+                        "</article>",
                     ]
                 )
             )
-        rec_lis = "\n".join(rec_items)
 
         meta_line = (
             "Infographic list: "
@@ -216,64 +235,94 @@ def user_report(
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
   <title>Letterboxd report — {html.escape(username)}</title>
   <style>
+    :root {{
+      --bg: #f5f2ea;
+      --paper: #fffaf0;
+      --ink: #1f1a12;
+      --muted: #6f6253;
+      --line: #dbc8ad;
+      --accent: #a44f2f;
+      --bar: #cf9a66;
+      --bar-soft: #f0dfcc;
+    }}
     body {{
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      margin: 2rem;
-      max-width: 60rem;
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at top left, #fff3de, #f5f2ea 36rem);
     }}
-    header {{ margin-bottom: 1.5rem; }}
+    main {{ max-width: 72rem; margin: 0 auto; padding: 1.2rem; }}
+    header {{ margin-bottom: 1rem; }}
     h1 {{ margin: 0 0 .25rem 0; }}
-    .muted {{ color: #666; }}
-    .grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-      gap: 1rem;
-    }}
-    section {{ border: 1px solid #eee; border-radius: .5rem; padding: 1rem; }}
-    .rec-title {{ font-weight: 700; }}
-    .rec-meta {{ font-size: .9rem; color: #444; margin-top: .15rem; }}
-    .rec-why {{ margin-top: .4rem; }}
-    code {{ background: #f6f6f6; padding: .1rem .25rem; border-radius: .25rem; }}
+    .muted {{ color: var(--muted); }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }}
+    .card {{ background: var(--paper); border: 1px solid var(--line); border-radius: 1rem; padding: 1rem; }}
+    .stats {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-top: .8rem; }}
+    .stat {{ border: 1px solid var(--line); border-radius: .6rem; padding: .55rem .6rem; background: #fff; }}
+    .stat .label {{ font-size: .8rem; color: var(--muted); }}
+    .stat .val {{ font-weight: 700; margin-top: .1rem; }}
+    .bar-row {{ display: grid; grid-template-columns: 8.5rem 1fr 2rem; gap: .5rem; align-items: center; margin: .35rem 0; }}
+    .bar-label {{ font-size: .86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    .bar-track {{ height: .58rem; background: var(--bar-soft); border-radius: 999px; overflow: hidden; }}
+    .bar-fill {{ height: 100%; background: var(--bar); }}
+    .bar-val {{ text-align: right; font-size: .82rem; color: var(--muted); }}
+    .recs {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: .8rem; }}
+    .rec-card {{ background: #fff; border: 1px solid var(--line); border-radius: .8rem; padding: .8rem; margin: 0; }}
+    .rec-card h3 {{ margin: 0; font-size: 1rem; }}
+    .rec-meta {{ font-size: .84rem; color: var(--muted); margin-top: .2rem; }}
+    .rec-card p {{ margin: .55rem 0 .3rem 0; }}
+    .rec-why {{ color: #3a332a; font-size: .92rem; }}
+    code {{ background: #f7ecdd; padding: .08rem .3rem; border-radius: .32rem; }}
+    a {{ color: var(--accent); }}
   </style>
 </head>
 <body>
-  <header>
-    <h1>Report: {html.escape(username)}</h1>
-    <div class=\"muted\">{meta_line}</div>
-  </header>
+  <main>
+    <header>
+      <h1>Report: {html.escape(username)}</h1>
+      <div class=\"muted\">{meta_line}</div>
+    </header>
 
-  <div class=\"grid\">
-    <section>
-      <h2>Top genres</h2>
-      {_render_top(summary.top_genres)}
+    <section class=\"card\" style=\"margin-bottom: 1rem;\">
+      <h2 style=\"margin:0 0 .25rem 0;\">Ratings and Runtime</h2>
+      <div class=\"stats\">
+        <div class=\"stat\"><div class=\"label\">Average runtime</div><div class=\"val\">{_fmt_nullable(summary.average_runtime_minutes, digits=1, suffix='m')}</div></div>
+        <div class=\"stat\"><div class=\"label\">Your average rating</div><div class=\"val\">{_fmt_nullable(summary.average_user_rating)}</div></div>
+        <div class=\"stat\"><div class=\"label\">Global average rating</div><div class=\"val\">{_fmt_nullable(summary.average_global_rating)}</div></div>
+      </div>
+      <div style=\"margin-top:.85rem\">
+        <h3 style=\"margin:.2rem 0\">Runtime distribution</h3>
+        {_render_rows(summary.runtime_distribution)}
+      </div>
     </section>
-    <section>
-      <h2>Top decades</h2>
-      {_render_top(summary.top_decades)}
-    </section>
-    <section>
-      <h2>Top directors</h2>
-      {_render_top(summary.top_directors)}
-    </section>
-  </div>
 
-  <section style=\"margin-top: 1rem;\">
-    <h2>Recommendations</h2>
-    <ol>
-      {rec_lis or '<li><em>No recommendations.</em></li>'}
-    </ol>
-  </section>
+    <div class=\"grid\">
+      <section class=\"card\">
+        <h2 style=\"margin-top:0\">Top genres</h2>
+        {_render_rows(summary.top_genres)}
+      </section>
+      <section class=\"card\">
+        <h2 style=\"margin-top:0\">Top decades</h2>
+        {_render_rows(summary.top_decades)}
+      </section>
+      <section class=\"card\">
+        <h2 style=\"margin-top:0\">Top directors</h2>
+        {_render_rows(summary.top_directors)}
+      </section>
+    </div>
 
-  <section style=\"margin-top: 1rem;\">
-    <h2>API links</h2>
-    <ul>
-      <li>
-        <a href=\"{infographic_url}\">
-          infographic JSON
-        </a>
-      </li>
-    </ul>
-  </section>
+    <section class=\"card\" style=\"margin-top: 1rem;\">
+      <h2 style=\"margin-top:0\">Recommendations</h2>
+      <div class=\"recs\">{''.join(rec_items) or '<div class="muted"><em>No recommendations.</em></div>'}</div>
+    </section>
+
+    <section class=\"card\" style=\"margin-top: 1rem;\">
+      <h2 style=\"margin-top:0\">API links</h2>
+      <ul>
+        <li><a href=\"{infographic_url}\">infographic JSON</a></li>
+      </ul>
+    </section>
+  </main>
 </body>
 </html>"""
 
@@ -288,10 +337,7 @@ def user_report(
 
 @router.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
-    """Minimal single-page UI for the recommender.
-
-    Milestone M4 focuses on a lightweight frontend without bundlers or frameworks.
-    """
+    """Single-page UI for ingestion, infographic, and iterative recommendations."""
 
     html_doc = """<!doctype html>
 <html lang=\"en\">
@@ -300,69 +346,192 @@ def index() -> HTMLResponse:
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
   <title>Letterboxd Recommender</title>
   <style>
-    :root { --border: #eaeaea; --muted: #666; --bg: #fafafa; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; background: var(--bg); }
-    header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); background: white; }
-    h1 { margin: 0; font-size: 1.1rem; }
+    :root {
+      --bg: #10171d;
+      --bg-alt: #0b1116;
+      --panel: #17222b;
+      --panel-soft: #1f2f3b;
+      --text: #ecf3f8;
+      --muted: #9eb3c4;
+      --line: #2b3f4e;
+      --accent: #f5a24a;
+      --accent-2: #6ccadf;
+      --chip: #22394a;
+      --bar-bg: #223544;
+      --bar-fill: linear-gradient(90deg, #6ccadf, #f5a24a);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(80rem 40rem at -10% -20%, #294458 0%, rgba(41, 68, 88, 0) 45%),
+        radial-gradient(70rem 35rem at 110% -10%, #583b2c 0%, rgba(88, 59, 44, 0) 38%),
+        linear-gradient(160deg, var(--bg), var(--bg-alt));
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      min-height: 100vh;
+    }
+    .container { max-width: 80rem; margin: 0 auto; padding: 1rem; }
+    header {
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      padding: 1rem;
+      background: rgba(23, 34, 43, 0.9);
+      backdrop-filter: blur(6px);
+    }
+    h1 { margin: 0; font-size: 1.4rem; }
     .muted { color: var(--muted); }
-    .layout { display: grid; grid-template-columns: 1.2fr .8fr; gap: 1rem; padding: 1rem; max-width: 72rem; margin: 0 auto; }
-    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
-    .card { background: white; border: 1px solid var(--border); border-radius: .75rem; padding: 1rem; }
-    label { display: block; font-size: .9rem; margin-bottom: .25rem; }
-    input, button { font: inherit; }
-    input[type=text] { width: 100%; padding: .55rem .6rem; border: 1px solid var(--border); border-radius: .5rem; }
-    button { padding: .55rem .75rem; border: 1px solid var(--border); border-radius: .5rem; background: #111; color: white; cursor: pointer; }
-    button:disabled { opacity: .5; cursor: not-allowed; }
-    .row { display: grid; grid-template-columns: 1fr auto; gap: .5rem; align-items: end; }
-    .chat { display: flex; flex-direction: column; gap: .5rem; margin-top: 1rem; }
-    .msg { padding: .6rem .7rem; border-radius: .65rem; max-width: 44rem; white-space: pre-wrap; }
-    .msg.user { align-self: flex-end; background: #111; color: white; }
-    .msg.bot { align-self: flex-start; background: #f4f4f4; border: 1px solid var(--border); }
-    .pill { display: inline-block; padding: .15rem .4rem; border: 1px solid var(--border); border-radius: 999px; font-size: .8rem; background: #fff; }
-    .kv { display: grid; grid-template-columns: 1fr auto; gap: .5rem; }
-    ul { margin: .5rem 0 0 1.1rem; }
-    code { background: #f6f6f6; padding: .1rem .25rem; border-radius: .25rem; }
+    .layout {
+      display: grid;
+      grid-template-columns: 1.3fr .7fr;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      background: rgba(23, 34, 43, 0.92);
+      padding: 1rem;
+    }
+    label { display: block; font-size: .88rem; margin-bottom: .25rem; color: var(--muted); }
+    input, button { font: inherit; color: inherit; }
+    input[type=text] {
+      width: 100%;
+      padding: .62rem .72rem;
+      border-radius: .65rem;
+      border: 1px solid var(--line);
+      background: var(--panel-soft);
+    }
+    button {
+      padding: .6rem .9rem;
+      border-radius: .65rem;
+      border: 1px solid #476173;
+      background: linear-gradient(135deg, #375266, #273947);
+      cursor: pointer;
+      transition: transform .14s ease, border-color .14s ease;
+    }
+    button:hover { transform: translateY(-1px); border-color: #6f8ca1; }
+    button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+    .row { display: grid; grid-template-columns: 1fr auto; gap: .55rem; align-items: end; }
+    .pill {
+      display: inline-block;
+      padding: .16rem .48rem;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--chip);
+      font-size: .8rem;
+    }
+    .chat {
+      margin-top: .8rem;
+      max-height: 22rem;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: .5rem;
+      padding-right: .2rem;
+    }
+    .msg {
+      max-width: 38rem;
+      border: 1px solid var(--line);
+      border-radius: .78rem;
+      padding: .56rem .68rem;
+      white-space: pre-wrap;
+      animation: rise .22s ease;
+    }
+    .msg.user { margin-left: auto; background: #324c61; }
+    .msg.bot { background: #1f303c; }
+    .rec-grid {
+      margin-top: .85rem;
+      display: grid;
+      gap: .65rem;
+      grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    }
+    .rec {
+      border: 1px solid var(--line);
+      border-radius: .75rem;
+      background: #1e2d37;
+      padding: .6rem;
+    }
+    .rec h4 { margin: 0 0 .2rem 0; font-size: .98rem; }
+    .rec-meta { font-size: .8rem; color: var(--muted); }
+    .rec p { margin: .38rem 0 0 0; font-size: .9rem; }
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .55rem;
+      margin: .8rem 0;
+    }
+    .stat {
+      border: 1px solid var(--line);
+      border-radius: .7rem;
+      padding: .5rem .55rem;
+      background: #1a2832;
+    }
+    .stat .k { color: var(--muted); font-size: .78rem; }
+    .stat .v { font-weight: 700; margin-top: .12rem; }
+    .chart { margin-top: .55rem; }
+    .bar-row {
+      display: grid;
+      grid-template-columns: 7.5rem 1fr 2rem;
+      gap: .45rem;
+      align-items: center;
+      margin: .3rem 0;
+    }
+    .bar-label { font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar-track { height: .54rem; background: var(--bar-bg); border-radius: 999px; overflow: hidden; }
+    .bar-fill { height: 100%; background: var(--bar-fill); }
+    .bar-count { font-size: .78rem; color: var(--muted); text-align: right; }
+    hr { border: none; border-top: 1px solid var(--line); margin: .8rem 0; }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    code { background: #283d4d; border-radius: .3rem; padding: .05rem .28rem; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Letterboxd Recommender</h1>
-    <div class=\"muted\">Enter a Letterboxd username, then refine recommendations via a chat-style prompt.</div>
-  </header>
+  <div class=\"container\">
+    <header>
+      <h1>Letterboxd Recommender</h1>
+      <div class=\"muted\">Load a user, review their viewing snapshot, then iterate with natural-language prompts.</div>
+    </header>
 
-  <div class=\"layout\">
-    <section class=\"card\">
-      <h2 style=\"margin-top:0\">1) Choose a user</h2>
-      <div class=\"row\">
-        <div>
-          <label for=\"username\">Letterboxd username</label>
-          <input id=\"username\" type=\"text\" placeholder=\"e.g. jack\" autocomplete=\"username\" />
+    <div class=\"layout\">
+      <section class=\"card\">
+        <h2 style=\"margin-top:0\">1) User</h2>
+        <div class=\"row\">
+          <div>
+            <label for=\"username\">Letterboxd username</label>
+            <input id=\"username\" type=\"text\" placeholder=\"e.g. jack\" autocomplete=\"username\" />
+          </div>
+          <button id=\"load\">Load</button>
         </div>
-        <button id=\"load\">Load</button>
-      </div>
-      <div style=\"margin-top:.5rem\" class=\"muted\">
-        Session: <span id=\"session\" class=\"pill\">(none)</span>
-      </div>
+        <div style=\"margin-top:.55rem\" class=\"muted\">Session: <span id=\"session\" class=\"pill\">(none)</span></div>
 
-      <h2 style=\"margin:1rem 0 0 0\">2) Refine (chat)</h2>
-      <div class=\"chat\" id=\"chat\"></div>
+        <h2 style=\"margin:1rem 0 0 0\">2) Refine</h2>
+        <div class=\"chat\" id=\"chat\"></div>
 
-      <div style=\"margin-top: .75rem\" class=\"row\">
-        <div>
-          <label for=\"prompt\">Refinement prompt</label>
-          <input id=\"prompt\" type=\"text\" placeholder=\"e.g. something like Heat, but newer, no horror\" />
+        <div style=\"margin-top:.75rem\" class=\"row\">
+          <div>
+            <label for=\"prompt\">Refinement prompt</label>
+            <input id=\"prompt\" type=\"text\" placeholder=\"e.g. 5 more like Parasite but before 2010\" />
+          </div>
+          <button id=\"send\" disabled>Send</button>
         </div>
-        <button id=\"send\" disabled>Send</button>
-      </div>
-      <div style=\"margin-top: .75rem\" class=\"muted\">
-        Uses <code>POST /api/recommend</code> with <code>session_id</code> to avoid repeating films.
-      </div>
-    </section>
 
-    <aside class=\"card\">
-      <h2 style=\"margin-top:0\">Infographic</h2>
-      <div id=\"infographic\" class=\"muted\">No user loaded.</div>
-    </aside>
+        <div class=\"muted\" style=\"margin-top:.65rem\">Uses <code>POST /api/recommend</code> with <code>session_id</code> to avoid repeats.</div>
+
+        <hr />
+        <h3 style=\"margin:.3rem 0\">Recommendations</h3>
+        <div id=\"recommendations\" class=\"rec-grid\"></div>
+      </section>
+
+      <aside class=\"card\">
+        <h2 style=\"margin-top:0\">Infographic</h2>
+        <div id=\"infographic\" class=\"muted\">No user loaded.</div>
+      </aside>
+    </div>
   </div>
 
   <script>
@@ -394,24 +563,63 @@ def index() -> HTMLResponse:
       return await resp.json();
     }
 
+    function fmt(value, digits=2, suffix='') {
+      if (value === null || value === undefined) return 'n/a';
+      return `${Number(value).toFixed(digits)}${suffix}`;
+    }
+
+    function renderBars(items) {
+      if (!items || items.length === 0) return '<div class="muted"><em>No data</em></div>';
+      const max = Math.max(...items.map((x) => x.count), 1);
+      return items.map((it) => {
+        const width = Math.round((it.count / max) * 100);
+        return `
+          <div class="bar-row">
+            <div class="bar-label">${it.name}</div>
+            <div class="bar-track"><div class="bar-fill" style="width:${width}%"></div></div>
+            <div class="bar-count">${it.count}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
     function renderInfographic(summary) {
       const box = $('infographic');
-      const top = (items) => {
-        if (!items || items.length === 0) return '<div class="muted"><em>No data</em></div>';
-        const lis = items.map((it) => `<li><strong>${it.name}</strong> — ${it.count}</li>`).join('');
-        return `<ul>${lis}</ul>`;
-      };
-
       box.className = '';
       box.innerHTML = `
-        <div class="kv"><div><strong>User</strong></div><div><code>${summary.username}</code></div></div>
-        <div class="kv"><div><strong>List</strong></div><div><span class="pill">${summary.list_kind}</span></div></div>
-        <div class="kv"><div><strong>Films</strong></div><div>${summary.film_count}</div></div>
-        <hr style="border:none;border-top:1px solid var(--border);margin:.75rem 0" />
-        <div><strong>Top genres</strong>${top(summary.top_genres)}</div>
-        <div style="margin-top:.75rem"><strong>Top decades</strong>${top(summary.top_decades)}</div>
-        <div style="margin-top:.75rem"><strong>Top directors</strong>${top(summary.top_directors)}</div>
+        <div class="pill">${summary.list_kind}</div>
+        <div class="stats">
+          <div class="stat"><div class="k">Films</div><div class="v">${summary.film_count}</div></div>
+          <div class="stat"><div class="k">Avg runtime</div><div class="v">${fmt(summary.average_runtime_minutes, 1, 'm')}</div></div>
+          <div class="stat"><div class="k">Your avg rating</div><div class="v">${fmt(summary.average_user_rating)}</div></div>
+          <div class="stat"><div class="k">Global avg rating</div><div class="v">${fmt(summary.average_global_rating)}</div></div>
+        </div>
+        <div class="chart"><strong>Top genres</strong>${renderBars(summary.top_genres)}</div>
+        <div class="chart"><strong>Top decades</strong>${renderBars(summary.top_decades)}</div>
+        <div class="chart"><strong>Top directors</strong>${renderBars(summary.top_directors)}</div>
+        <div class="chart"><strong>Runtime distribution</strong>${renderBars(summary.runtime_distribution)}</div>
       `;
+    }
+
+    function renderRecommendations(items) {
+      const el = $('recommendations');
+      if (!items || items.length === 0) {
+        el.innerHTML = '<div class="muted"><em>No recommendations.</em></div>';
+        return;
+      }
+
+      el.innerHTML = items.map((r) => {
+        const year = r.year ? ` (${r.year})` : '';
+        const score = (r.score === null || r.score === undefined) ? 'n/a' : Number(r.score).toFixed(3);
+        return `
+          <article class="rec">
+            <h4>${r.title}${year}</h4>
+            <div class="rec-meta"><code>${r.film_id}</code> · score ${score}</div>
+            <p>${r.blurb || ''}</p>
+            <p><strong>Why:</strong> ${r.why || 'n/a'}</p>
+          </article>
+        `;
+      }).join('');
     }
 
     async function loadUser(username) {
@@ -420,7 +628,6 @@ def index() -> HTMLResponse:
       appendMsg('bot', `Loading data for ${username}...`);
 
       await apiJSON(`/api/users/${encodeURIComponent(username)}/ingest`, { method: 'POST' });
-
       const summary = await apiJSON(`/api/users/${encodeURIComponent(username)}/infographic?list_kind=watched&top_n=10`);
       renderInfographic(summary);
 
@@ -428,7 +635,6 @@ def index() -> HTMLResponse:
       $('session').textContent = existingSession || '(new)';
 
       await sendPrompt(username, '', existingSession);
-
       setBusy(false);
     }
 
@@ -448,19 +654,18 @@ def index() -> HTMLResponse:
         $('session').textContent = rec.session_id;
 
         const chat = $('chat');
-        chat.removeChild(chat.lastChild);
+        if (chat.lastChild) chat.removeChild(chat.lastChild);
 
         if (!rec.recommendations || rec.recommendations.length === 0) {
+          renderRecommendations([]);
           appendMsg('bot', 'No recommendations found. Try changing your refinement prompt.');
           return;
         }
 
-        const lines = rec.recommendations.map((r, i) => {
-          const yr = r.year ? ` (${r.year})` : '';
-          const why = r.why ? `\n  - why: ${r.why}` : '';
-          return `${i + 1}. ${r.title}${yr} [${r.film_id}]${why}`;
-        });
-        appendMsg('bot', `Recommendations:\n${lines.join('\n')}`);
+        renderRecommendations(rec.recommendations);
+
+        const titles = rec.recommendations.map((r, i) => `${i + 1}. ${r.title}`).join('\n');
+        appendMsg('bot', `Returned ${rec.recommendations.length} recommendations:\n${titles}`);
       } catch (err) {
         const chat = $('chat');
         if (chat.lastChild) chat.removeChild(chat.lastChild);
@@ -481,6 +686,13 @@ def index() -> HTMLResponse:
       $('prompt').value = '';
       const sessionId = localStorage.getItem(getSessionKey(username)) || '';
       await sendPrompt(username, prompt, sessionId);
+    });
+
+    $('prompt').addEventListener('keydown', async (ev) => {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      if ($('send').disabled) return;
+      $('send').click();
     });
 
     $('username').addEventListener('input', () => {

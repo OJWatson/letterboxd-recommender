@@ -24,6 +24,20 @@ EXPECTED_USER_FILMS_COLUMNS: Final[set[str]] = {
     "watchlist_position",
 }
 
+SPEC_MIN_COLUMNS: Final[set[str]] = {
+    "film_id",
+    "title",
+    "year",
+    "director",
+    "genres",
+    "runtime",
+    "country",
+    "user_rating",
+    "popularity_score",
+    "average_rating",
+    "keywords_tags",
+}
+
 # Bump this when the user-film dataframe schema or feature engineering changes.
 USER_FILMS_CACHE_VERSION: Final[str] = "v1"
 
@@ -152,6 +166,18 @@ def build_user_films_df(lists: IngestedLists) -> pd.DataFrame:
             {
                 "username": lists.username,
                 "film_slug": slug,
+                # Spec-aligned base columns (filled from cached metadata later when available).
+                "film_id": slug,
+                "title": None,
+                "year": None,
+                "director": None,
+                "genres": [],
+                "runtime": None,
+                "country": None,
+                "user_rating": None,
+                "popularity_score": None,
+                "average_rating": None,
+                "keywords_tags": [],
                 "in_watched": wpos is not None,
                 "in_watchlist": wlpos is not None,
                 "watched_position": wpos,
@@ -168,6 +194,29 @@ def validate_user_films_df(df: pd.DataFrame) -> None:
     missing = EXPECTED_USER_FILMS_COLUMNS - set(df.columns)
     if missing:
         raise DataframeBuildError(f"Missing columns: {sorted(missing)}")
+
+
+def _ensure_spec_columns(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    defaults: dict[str, object] = {
+        "film_id": out["film_slug"] if "film_slug" in out.columns else None,
+        "title": None,
+        "year": None,
+        "director": None,
+        "genres": [[] for _ in range(len(out))],
+        "runtime": None,
+        "country": None,
+        "user_rating": None,
+        "popularity_score": None,
+        "average_rating": None,
+        "keywords_tags": [[] for _ in range(len(out))],
+    }
+
+    for col in SPEC_MIN_COLUMNS:
+        if col not in out.columns:
+            out[col] = defaults[col]
+
+    return out
 
 
 @dataclass(frozen=True)
@@ -198,6 +247,7 @@ def add_basic_features(
 
     out = df.copy()
     validate_user_films_df(out)
+    out = _ensure_spec_columns(out)
 
     # Positions are 0-indexed; normalize to ~[0, 1]. Missing positions are filled
     # slightly beyond the max position.
@@ -247,6 +297,7 @@ def load_cached_user_films_df(
 
     df = pd.read_json(derived.user_films_df_path, orient="records")
     validate_user_films_df(df)
+    df = _ensure_spec_columns(df)
     return cache_key, df
 
 

@@ -18,6 +18,8 @@ def _fake_meta(slug: str) -> FilmMetadata:
             year=1979,
             directors=["Ridley Scott"],
             genres=["Science Fiction", "Horror"],
+            runtime_minutes=117,
+            average_rating=4.2,
         ),
         "heat": FilmMetadata(
             slug="heat",
@@ -25,6 +27,8 @@ def _fake_meta(slug: str) -> FilmMetadata:
             year=1995,
             directors=["Michael Mann"],
             genres=["Crime", "Thriller"],
+            runtime_minutes=170,
+            average_rating=4.1,
         ),
         "dune": FilmMetadata(
             slug="dune",
@@ -32,6 +36,8 @@ def _fake_meta(slug: str) -> FilmMetadata:
             year=2021,
             directors=["Denis Villeneuve"],
             genres=["Science Fiction"],
+            runtime_minutes=155,
+            average_rating=4.0,
         ),
     }
     return by_slug[slug]
@@ -56,6 +62,10 @@ def test_build_infographic_summary_counts(tmp_path: Path, monkeypatch) -> None:
     assert summary.film_count == 2
     assert dict(summary.top_decades) == {"1970s": 1, "1990s": 1}
     assert dict(summary.top_directors) == {"Ridley Scott": 1, "Michael Mann": 1}
+    assert dict(summary.runtime_distribution) == {"110-129m": 1, "150m+": 1}
+    assert summary.average_runtime_minutes == 143.5
+    assert summary.average_global_rating == 4.15
+    assert summary.average_user_rating is None
 
     genres = dict(summary.top_genres)
     assert genres["Science Fiction"] == 1
@@ -88,5 +98,9 @@ def test_infographic_endpoint_uses_persisted_lists(tmp_path: Path, monkeypatch) 
     assert body["username"] == "alice"
     assert body["film_count"] == 2
     assert body["list_kind"] == "watched"
+    assert body["average_runtime_minutes"] == 143.5
+    assert body["average_global_rating"] == 4.15
+    assert body["average_user_rating"] is None
+    assert {x["name"] for x in body["runtime_distribution"]} == {"110-129m", "150m+"}
 
     assert {x["name"] for x in body["top_directors"]} == {"Ridley Scott", "Michael Mann"}

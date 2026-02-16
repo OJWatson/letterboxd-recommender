@@ -23,6 +23,8 @@ class FilmMetadata:
     directors: list[str] | None = None
     genres: list[str] | None = None
     countries: list[str] | None = None
+    runtime_minutes: int | None = None
+    average_rating: float | None = None
 
 
 _LD_JSON_RE = re.compile(
@@ -49,7 +51,43 @@ def load_cached_film_metadata(slug: str, *, data_dir: Path | None = None) -> Fil
         directors=raw.get("directors"),
         genres=raw.get("genres"),
         countries=raw.get("countries"),
+        runtime_minutes=raw.get("runtime_minutes"),
+        average_rating=raw.get("average_rating"),
     )
+
+
+def _parse_iso8601_duration_minutes(value: str | None) -> int | None:
+    # Supports compact ISO-8601 durations such as PT95M, PT2H34M, PT2H.
+    if not isinstance(value, str):
+        return None
+
+    m = re.fullmatch(r"PT(?:(?P<h>\d+)H)?(?:(?P<m>\d+)M)?", value.strip().upper())
+    if not m:
+        return None
+
+    hours = int(m.group("h")) if m.group("h") else 0
+    mins = int(m.group("m")) if m.group("m") else 0
+    total = (hours * 60) + mins
+    return total if total > 0 else None
+
+
+def _parse_average_rating(movie: dict[str, Any]) -> float | None:
+    agg = movie.get("aggregateRating")
+    if not isinstance(agg, dict):
+        return None
+
+    rating_value = agg.get("ratingValue")
+    if rating_value is None:
+        return None
+
+    try:
+        rating = float(rating_value)
+    except (TypeError, ValueError):
+        return None
+
+    if rating < 0:
+        return None
+    return rating
 
 
 def persist_film_metadata(meta: FilmMetadata, *, data_dir: Path | None = None) -> Path:
@@ -173,6 +211,8 @@ def parse_film_metadata_from_html(slug: str, html: str) -> FilmMetadata:
         directors=_dedupe(directors) or None,
         genres=_dedupe(genres) or None,
         countries=_dedupe(countries) or None,
+        runtime_minutes=_parse_iso8601_duration_minutes(movie.get("duration")),
+        average_rating=_parse_average_rating(movie),
     )
 
 

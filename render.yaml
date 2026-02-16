@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: letterboxd-recommender
+    runtime: python
+    plan: starter
+    autoDeploy: true
+    buildCommand: pip install uv && uv sync
+    startCommand: uv run uvicorn letterboxd_recommender.api.app:app --host 0.0.0.0 --port $PORT --proxy-headers
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12
+      - key: LETTERBOXD_RECOMMENDER_DATA_DIR
+        value: /var/data
+      - key: LETTERBOXD_RECOMMENDER_RL_GLOBAL
+        value: "60"
+      - key: LETTERBOXD_RECOMMENDER_RL_GLOBAL_WINDOW_S
+        value: "60"
+      - key: LETTERBOXD_RECOMMENDER_RL_INGEST
+        value: "5"
+      - key: LETTERBOXD_RECOMMENDER_RL_INGEST_WINDOW_S
+        value: "60"
+    disk:
+      name: letterboxd-data
+      mountPath: /var/data
+      sizeGB: 1

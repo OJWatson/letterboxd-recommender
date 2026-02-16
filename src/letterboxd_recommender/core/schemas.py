@@ -69,3 +69,7 @@ class InfographicSummaryResponse(BaseModel):
     top_genres: list[CountItem]
     top_decades: list[CountItem]
     top_directors: list[CountItem]
+    runtime_distribution: list[CountItem]
+    average_runtime_minutes: float | None = None
+    average_user_rating: float | None = None
+    average_global_rating: float | None = None

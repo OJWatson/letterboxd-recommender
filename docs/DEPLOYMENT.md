@@ -2,6 +2,45 @@
 
 This project is a small FastAPI app. It can run locally, on a VM, or on a simple PaaS.
 
+## Render (recommended quick path)
+
+This repo includes a Render Blueprint file at `render.yaml`.
+
+### One-time setup
+
+1. Push this repository to GitHub.
+2. In Render, choose **New +** -> **Blueprint**.
+3. Select your repo and confirm the blueprint.
+4. Render will create:
+   - one web service
+   - one persistent disk mounted at `/var/data`
+5. Once deployed, open:
+   - app UI: `https://<your-service>.onrender.com/`
+   - health endpoint: `https://<your-service>.onrender.com/health`
+
+### Notes
+
+- The blueprint sets `LETTERBOXD_RECOMMENDER_DATA_DIR=/var/data` so session/data caches persist across restarts.
+- If you later host frontend separately, set `LETTERBOXD_RECOMMENDER_CORS_ORIGINS` to your frontend origin.
+
+## GitHub Actions auto-deploy to Render
+
+This repo includes `.github/workflows/deploy.yml`, which deploys to Render after `CI` succeeds on `main`.
+
+### One-time setup in Render
+
+1. Open your Render web service.
+2. Go to **Settings** -> **Deploy Hook**.
+3. Create/copy a deploy hook URL.
+
+### One-time setup in GitHub
+
+1. Open your GitHub repo -> **Settings** -> **Secrets and variables** -> **Actions**.
+2. Add a new repository secret:
+   - `RENDER_DEPLOY_HOOK_URL` = your Render deploy hook URL
+
+After this, each successful CI run on `main` will automatically trigger a Render deploy.
+
 ## Production run command
 
 ```bash
