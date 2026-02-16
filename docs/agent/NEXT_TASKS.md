@@ -1,11 +1,11 @@
 # NEXT_TASKS
 
 Now:
-- CI.FIX.M4 — CI fix: make GitHub Actions green for M4 boundary
 
 Next:
 
 Done:
+- CI.FIX.M4 — CI fix: make GitHub Actions green for M4 boundary
 - M4.END — Milestone end: M4 complete (gate on CI)
 - M4.2 — Deploy: add deployment docs + production config (CORS, env vars)
 - M4.1 — Backend: session persistence (lightweight store) + rate limiting / error handling
