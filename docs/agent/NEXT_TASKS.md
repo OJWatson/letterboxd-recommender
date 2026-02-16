@@ -1,13 +1,15 @@
 # NEXT_TASKS
 
 Now:
-- M4.0 — Frontend: add minimal UI (username input + chat-style refinement + infographic panel)
+- M4.END — Milestone end: M4 complete (gate on CI)
 
 Next:
-- M4.1 — Backend: session persistence (lightweight store) + rate limiting / error handling
-- M4.2 — Deploy: add deployment docs + production config (CORS, env vars)
+- CI.FIX.M4 — CI fix: make GitHub Actions green for M4 boundary
 
 Done:
+- M4.2 — Deploy: add deployment docs + production config (CORS, env vars)
+- M4.1 — Backend: session persistence (lightweight store) + rate limiting / error handling
+- M4.0 — Frontend: add minimal UI (username input + chat-style refinement + infographic panel)
 - M3.END — Milestone end: M3 complete (gate on CI)
 - M3.4 — Session: track previously recommended films per session and enforce exclusion
 - M3.3 — Recommender: apply constraint filtering layer (genre/year/country/similar-to) + tests
