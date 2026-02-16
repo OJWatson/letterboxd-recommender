@@ -34,3 +34,6 @@ This file records task-by-task execution notes for the portfolio automation.
   - Docs: `docs/DEPLOYMENT.md`, `.env.example`.
   - CORS: opt-in CORS middleware configured by `LETTERBOXD_RECOMMENDER_CORS_ORIGINS`.
   - Tests: `tests/test_cors.py`.
+- M4.END: Confirmed milestone M4 acceptance gates are green locally.
+  - `uv run ruff check .`
+  - `uv run pytest -q`

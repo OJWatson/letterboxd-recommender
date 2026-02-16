@@ -1,1 +1,1 @@
-M4.END — Milestone end: M4 complete (gate on CI)
+CI.FIX.M4 — CI fix: make GitHub Actions green for M4 boundary
